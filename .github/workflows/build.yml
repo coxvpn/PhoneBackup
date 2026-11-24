@@ -1,0 +1,56 @@
+name: Build PhoneBackup
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build helper APK
+        working-directory: android-helper
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helper-apk
+          path: android-helper/app/build/outputs/apk/debug/app-debug.apk
+
+  windows:
+    needs: android
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: helper-apk
+          path: windows-app/Resources
+      - name: Prepare resources (helper.apk + adb)
+        shell: pwsh
+        run: |
+          Move-Item windows-app/Resources/app-debug.apk windows-app/Resources/helper.apk -Force
+          Invoke-WebRequest https://dl.google.com/android/repository/platform-tools-latest-windows.zip -OutFile pt.zip
+          Expand-Archive pt.zip -DestinationPath pt
+          New-Item -ItemType Directory -Force windows-app/Resources/adb | Out-Null
+          foreach ($f in 'adb.exe','AdbWinApi.dll','AdbWinUsbApi.dll','libwinpthread-1.dll') {
+            if (Test-Path "pt/platform-tools/$f") { Copy-Item "pt/platform-tools/$f" windows-app/Resources/adb/ }
+          }
+          Get-ChildItem windows-app/Resources -Recurse
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish
+        run: dotnet publish windows-app/PhoneBackup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhoneBackup-Windows
+          path: out/PhoneBackup.exe
