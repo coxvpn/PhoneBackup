@@ -1,18 +1,33 @@
-# PhoneBackup — پشتیبان‌گیری و بازیابی گوشی اندروید از ویندوز
+# PhoneBackup — Android backup & restore from Windows
 
-بکاپ و ریستور: فایل نصبی برنامه‌ها (APK)، مخاطبین، پیامک‌ها، عکس/فیلم/موزیک.
+Back up and restore: selected apps (installable APK files), contacts, SMS, photos / videos / music.
+Created by Mostafa Mandegari (مصطفی ماندگاری).
 
-## ساخت برنامه (بدون نیاز به برنامه‌نویسی)
-1. همه‌ی فایل‌ها را در یک ریپوی گیت‌هاب آپلود کنید (حتماً پوشه‌ی `.github` هم باشد).
-2. تب **Actions** ← **Build PhoneBackup** ← **Run workflow**.
-3. بعد از حدود ۵ تا ۱۰ دقیقه، پایین صفحه‌ی اجرا در بخش **Artifacts**، فایل `PhoneBackup-Windows` را دانلود کنید و از حالت زیپ دربیاورید.
+## Build (no programming needed)
+1. Upload all files to a **public** GitHub repository (include the `.github` folder).
+2. Settings → Actions → General → Workflow permissions → **Read and write permissions** → Save.
+3. Every push builds automatically and publishes a new **Release** (right side of the repo page) containing `PhoneBackup.exe`.
+   You can also run it manually from the Actions tab → Run workflow.
 
-## استفاده
-1. در گوشی: Settings ← About phone ← هفت بار روی Build number بزنید ← Developer options ← **USB debugging** را روشن کنید (در شیائومی/پوکو **Install via USB** و **USB debugging (Security settings)** هم).
-2. گوشی را با کابل وصل کنید و پنجره‌ی Allow را تأیید کنید.
-3. `PhoneBackup.exe` را اجرا کنید.
+## Use
+1. On the phone enable **USB debugging** (Xiaomi/Poco: also *Install via USB*).
+2. Connect the cable and accept the Allow prompt.
+3. Run `PhoneBackup.exe`. Language: English by default, Persian from the top-right box.
+4. Tick the media folders you want (the list is read from the phone; Android/media/... entries include WhatsApp media).
+5. Press *Load app list from phone*, tick the apps you want, choose a folder, press *Back up*.
+6. *Restore* opens a window where you choose which apps and media folders to put back. *Cancel* stops any running job.
 
-## نکات
-- بازیابی پیامک: روی گوشی باید یک‌بار «برنامه پیامک پیش‌فرض» را تأیید کنید؛ بعد از پایان، برنامه پیامک قبلی را دوباره پیش‌فرض کنید.
-- داده‌ی داخلی برنامه‌ها (چت‌ها، تنظیمات) بکاپ گرفته نمی‌شود؛ فقط خود برنامه.
-- MMS و تاریخچه تماس پشتیبانی نمی‌شود.
+## Backup layout
+```
+PhoneBackup_YYYYMMDD_HHMM/
+  apps/        Telegram.apk, Instagram.apks ...   (one file per app, named by app name)
+  media/       DCIM, Pictures, Movies, Music
+  contacts.json
+  sms.json
+```
+- Apps with a single APK become `Name.apk` (installable directly).
+- Apps with split APKs become `Name.apks` (a zip of the splits; this tool installs it, and so do split-installer apps such as SAI).
+- To skip an app during restore, just delete its file from the `apps` folder.
+
+## Updates
+The *Check for updates* button reads the latest GitHub Release, downloads it and restarts the app (the repository must be public).

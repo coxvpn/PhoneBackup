@@ -9,11 +9,21 @@
     <AssemblyName>PhoneBackup</AssemblyName>
     <RootNamespace>PhoneBackup</RootNamespace>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\helper.apk" LogicalName="helper.apk" />
     <EmbeddedResource Include="Resources\adb\*" LogicalName="adb/%(Filename)%(Extension)" />
+    <Resource Include="Resources\app.ico" />
+  </ItemGroup>
+
+  <!-- آدرس ریپوی گیت‌هاب (برای بررسی نسخه‌ی جدید) از workflow داده می‌شود -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>RepoSlug</_Parameter1>
+      <_Parameter2>$(RepoSlug)</_Parameter2>
+    </AssemblyAttribute>
   </ItemGroup>
 
 </Project>

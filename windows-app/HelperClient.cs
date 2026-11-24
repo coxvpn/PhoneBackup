@@ -4,6 +4,7 @@ using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace PhoneBackup;
@@ -13,18 +14,26 @@ public class HelperClient : IDisposable
 {
     public const int Port = 38455;
     readonly string token;
+    readonly CancellationToken ct;
+    CancellationTokenRegistration reg;
     TcpClient? tcp;
     StreamReader? reader;
     StreamWriter? writer;
     public bool DefaultSms { get; private set; }
 
-    public HelperClient(string token) { this.token = token; }
+    public HelperClient(string token, CancellationToken ct)
+    {
+        this.token = token;
+        this.ct = ct;
+    }
 
     public async Task<bool> ConnectAsync(int seconds)
     {
+        reg = ct.Register(() => { try { tcp?.Dispose(); } catch { } });
         var end = DateTime.UtcNow.AddSeconds(seconds);
         while (DateTime.UtcNow < end)
         {
+            ct.ThrowIfCancellationRequested();
             try
             {
                 tcp?.Dispose();
@@ -36,10 +45,10 @@ public class HelperClient : IDisposable
                 writer = new StreamWriter(ns, enc) { AutoFlush = true, NewLine = "\n" };
                 if (await PingAsync()) return true;
             }
-            catch
+            catch (Exception) when (!ct.IsCancellationRequested)
             {
             }
-            await Task.Delay(700);
+            await Task.Delay(700, ct);
         }
         return false;
     }
@@ -53,29 +62,43 @@ public class HelperClient : IDisposable
 
     public async Task<JsonNode> Request(JsonObject req)
     {
-        req["token"] = token;
-        await writer!.WriteLineAsync(req.ToJsonString());
-        var line = await reader!.ReadLineAsync() ?? throw new IOException("ارتباط با گوشی قطع شد");
-        var node = JsonNode.Parse(line)!;
-        if (node["ok"]?.GetValue<bool>() == false)
-            throw new Exception(node["error"]?.GetValue<string>() ?? "خطای ناشناخته");
-        return node;
+        try
+        {
+            req["token"] = token;
+            await writer!.WriteLineAsync(req.ToJsonString());
+            var line = await reader!.ReadLineAsync() ?? throw new IOException("Connection to the phone was lost");
+            var node = JsonNode.Parse(line)!;
+            if (node["ok"]?.GetValue<bool>() == false)
+                throw new Exception(node["error"]?.GetValue<string>() ?? "Unknown error");
+            return node;
+        }
+        catch (Exception) when (ct.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(ct);
+        }
     }
 
-    /// دستورهایی مثل get_contacts / get_sms که اول count و بعد خط‌به‌خط داده می‌دهند.
+    /// دستورهایی مثل get_contacts / get_sms / get_apps که اول count و بعد خط‌به‌خط داده می‌دهند.
     public async Task<List<JsonNode>> Stream(string cmd, Action<int, int>? progress)
     {
         var head = await Request(new JsonObject { ["cmd"] = cmd });
         int count = head["count"]!.GetValue<int>();
         var list = new List<JsonNode>(count);
-        for (int i = 0; i < count; i++)
+        try
         {
-            var line = await reader!.ReadLineAsync() ?? throw new IOException("ارتباط با گوشی قطع شد");
-            var n = JsonNode.Parse(line)!;
-            if (n["ok"]?.GetValue<bool>() == false)
-                throw new Exception(n["error"]?.GetValue<string>() ?? "خطا");
-            list.Add(n);
-            if (i % 200 == 0) progress?.Invoke(i, count);
+            for (int i = 0; i < count; i++)
+            {
+                var line = await reader!.ReadLineAsync() ?? throw new IOException("Connection to the phone was lost");
+                var n = JsonNode.Parse(line)!;
+                if (n["ok"]?.GetValue<bool>() == false)
+                    throw new Exception(n["error"]?.GetValue<string>() ?? "Error");
+                list.Add(n);
+                if (i % 200 == 0) progress?.Invoke(i, count);
+            }
+        }
+        catch (Exception) when (ct.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(ct);
         }
         progress?.Invoke(count, count);
         return list;
@@ -86,5 +109,9 @@ public class HelperClient : IDisposable
         try { await Request(new JsonObject { ["cmd"] = "stop" }); } catch { }
     }
 
-    public void Dispose() => tcp?.Dispose();
+    public void Dispose()
+    {
+        reg.Dispose();
+        tcp?.Dispose();
+    }
 }

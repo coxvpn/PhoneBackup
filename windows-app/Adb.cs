@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace PhoneBackup;
@@ -12,6 +13,9 @@ public class Adb
 {
     public string Dir { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PhoneBackup", "tools");
+
+    /// با لغو این توکن، پروسه‌ی در حال اجرای adb کشته می‌شود.
+    public CancellationToken Token { get; set; }
 
     string AdbExe => Path.Combine(Dir, "adb.exe");
     public string HelperApk => Path.Combine(Dir, "helper.apk");
@@ -60,6 +64,7 @@ public class Adb
 
     async Task<(int Code, string Output)> Core(string[] args, Action<string>? onLine)
     {
+        Token.ThrowIfCancellationRequested();
         var psi = new ProcessStartInfo(AdbExe)
         {
             RedirectStandardOutput = true,
@@ -85,7 +90,12 @@ public class Adb
         p.Start();
         p.BeginOutputReadLine();
         p.BeginErrorReadLine();
+        using var reg = Token.Register(() =>
+        {
+            try { if (!p.HasExited) p.Kill(true); } catch { }
+        });
         await p.WaitForExitAsync();
+        Token.ThrowIfCancellationRequested();
         string output;
         lock (sb) output = sb.ToString();
         return (p.ExitCode, output);

@@ -114,6 +114,7 @@ class ServerService : Service() {
                         }
                         "put_contacts" -> send(w, ContactsIO.write(this, req.getJSONArray("data"), req.optBoolean("first")).put("ok", true))
                         "get_sms" -> SmsIO.stream(this, w)
+                        "get_apps" -> AppsIO.stream(this, w)
                         "put_sms" -> send(w, SmsIO.write(this, req.getJSONArray("data"), req.optBoolean("first")).put("ok", true))
                         "stop" -> {
                             send(w, JSONObject().put("ok", true))

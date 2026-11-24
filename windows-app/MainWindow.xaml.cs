@@ -1,13 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -16,7 +22,7 @@ namespace PhoneBackup;
 public partial class MainWindow : Window
 {
     const string Pkg = "com.phonebackup.helper";
-    static readonly string[] MediaFolders = { "DCIM", "Pictures", "Movies", "Music" };
+    static readonly string[] DefaultFolders = { "DCIM", "Pictures", "Movies", "Music" };
     static readonly JsonSerializerOptions FileOpts = new()
     {
         WriteIndented = false,
@@ -25,27 +31,97 @@ public partial class MainWindow : Window
 
     readonly Adb adb = new();
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(3) };
+    readonly ObservableCollection<AppItem> apps = new();
+    readonly ObservableCollection<PickItem> folders = new();
+    ICollectionView? appsView;
+    CancellationTokenSource? cts;
+    CancellationToken ct;
     string? serial;
     string? deviceDesc;
+    string? deviceErr;
+    int devState = -1; // -1 searching, 0 none, 1 unauthorized, 2 connected, 3 adb error
     bool busy;
+    bool ready;
+
+    static string T(string key, params object[] a) => Loc.T(key, a);
 
     public MainWindow()
     {
         InitializeComponent();
+        Loc.Load();
+
+        AppList.ItemsSource = apps;
+        FolderList.ItemsSource = folders;
+        appsView = CollectionViewSource.GetDefaultView(apps);
+        appsView.Filter = o =>
+        {
+            var t = SearchBox.Text.Trim();
+            if (t.Length == 0) return true;
+            var a = (AppItem)o;
+            return a.Name.Contains(t, StringComparison.OrdinalIgnoreCase) ||
+                   a.Package.Contains(t, StringComparison.OrdinalIgnoreCase);
+        };
+
         FolderBox.Text = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        LangBox.SelectedIndex = Loc.Persian ? 1 : 0;
+        ready = true;
+        ApplyLanguage();
+
         try { adb.Extract(); }
-        catch (Exception ex) { Log("خطا در آماده‌سازی ADB: " + ex.Message); }
+        catch (Exception ex) { Log(T("adb_prep_error", ex.Message)); }
 
         timer.Tick += async (_, _) => await RefreshDevice();
         Loaded += async (_, _) =>
         {
-            Log("گوشی را با کابل وصل کنید و USB Debugging را روشن کنید.");
+            Log(T("hint_connect"));
             await RefreshDevice();
             timer.Start();
         };
     }
 
-    // ---------------- رابط ----------------
+    // ---------------- language / UI ----------------
+
+    void ApplyLanguage()
+    {
+        FlowDirection = Loc.Persian ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+        Title = T("title");
+        LangLabel.Text = T("language");
+        UpdateBtn.Content = T("btn_update");
+        AboutBtn.Content = T("btn_about");
+        GrpWhat.Header = T("grp_what");
+        ChkApps.Content = T("chk_apps");
+        ChkMedia.Content = T("chk_media");
+        ChkContacts.Content = T("chk_contacts");
+        ChkSms.Content = T("chk_sms");
+        GrpMedia.Header = T("grp_media");
+        RefreshFoldersBtn.Content = T("btn_refresh_folders");
+        GrpApps.Header = T("grp_apps");
+        LoadAppsBtn.Content = T("btn_load_apps");
+        SelAllBtn.Content = T("btn_sel_all");
+        SelNoneBtn.Content = T("btn_sel_none");
+        SearchLabel.Text = T("search");
+        if (AppList.View is GridView gv && gv.Columns.Count >= 4)
+        {
+            gv.Columns[1].Header = T("col_name");
+            gv.Columns[2].Header = T("col_pkg");
+            gv.Columns[3].Header = T("col_size");
+        }
+        FolderLabel.Text = T("folder");
+        BrowseBtn.Content = T("browse");
+        BackupBtn.Content = T("btn_backup");
+        RestoreBtn.Content = T("btn_restore");
+        CancelBtn.Content = T("btn_cancel");
+        UpdateAppCount();
+        RenderDevice();
+    }
+
+    void Lang_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ready) return;
+        Loc.Persian = LangBox.SelectedIndex == 1;
+        Loc.Save();
+        ApplyLanguage();
+    }
 
     void Log(string s)
     {
@@ -58,11 +134,33 @@ public partial class MainWindow : Window
         LogBox.ScrollToEnd();
     }
 
-    void SetDevice(bool connected, Brush color, string text)
+    void RenderDevice()
     {
-        DeviceDot.Fill = color;
-        DeviceText.Text = text;
-        if (!busy) BackupBtn.IsEnabled = RestoreBtn.IsEnabled = connected;
+        switch (devState)
+        {
+            case 2:
+                DeviceDot.Fill = Brushes.Green;
+                DeviceText.Text = T("device_connected", deviceDesc ?? "");
+                break;
+            case 1:
+                DeviceDot.Fill = Brushes.Orange;
+                DeviceText.Text = T("device_unauth");
+                break;
+            case 3:
+                DeviceDot.Fill = Brushes.Red;
+                DeviceText.Text = T("device_adb_error", deviceErr ?? "");
+                break;
+            case 0:
+                DeviceDot.Fill = Brushes.Red;
+                DeviceText.Text = T("device_none");
+                break;
+            default:
+                DeviceDot.Fill = Brushes.Gray;
+                DeviceText.Text = T("device_searching");
+                break;
+        }
+        if (!busy)
+            BackupBtn.IsEnabled = RestoreBtn.IsEnabled = LoadAppsBtn.IsEnabled = RefreshFoldersBtn.IsEnabled = devState == 2;
     }
 
     void SetProgress(int value, int max, string text)
@@ -79,6 +177,107 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog() == true) FolderBox.Text = dlg.FolderName;
     }
 
+    void About_Click(object sender, RoutedEventArgs e) => new AboutWindow { Owner = this }.ShowDialog();
+
+    void Cancel_Click(object sender, RoutedEventArgs e)
+    {
+        if (cts == null) return;
+        Log(T("cancelling"));
+        CancelBtn.IsEnabled = false;
+        cts.Cancel();
+    }
+
+    // ---------------- app list ----------------
+
+    void UpdateAppCount()
+    {
+        AppCountText.Text = T("apps_selected", apps.Count(a => a.IsSelected), apps.Count);
+    }
+
+    void Search_Changed(object sender, TextChangedEventArgs e) => appsView?.Refresh();
+
+    void SetVisibleSelection(bool value)
+    {
+        if (appsView == null) return;
+        foreach (var a in appsView.Cast<AppItem>().ToList()) a.IsSelected = value;
+        UpdateAppCount();
+    }
+
+    void SelAll_Click(object sender, RoutedEventArgs e) => SetVisibleSelection(true);
+    void SelNone_Click(object sender, RoutedEventArgs e) => SetVisibleSelection(false);
+
+    async void LoadApps_Click(object sender, RoutedEventArgs e) => await RunSafe(LoadApps);
+
+    async Task LoadApps()
+    {
+        using var h = await ConnectHelper(false);
+        if (h == null) { Log(T("apps_load_failed")); return; }
+        try
+        {
+            Log(T("loading_apps"));
+            var list = await h.Stream("get_apps", (i, n) => SetProgress(i, n, T("loading_apps")));
+            apps.Clear();
+            foreach (var n in list)
+            {
+                var item = new AppItem
+                {
+                    Package = n["p"]?.GetValue<string>() ?? "",
+                    Name = n["n"]?.GetValue<string>() ?? "",
+                    Version = n["v"]?.GetValue<string>() ?? "",
+                    Size = n["s"]?.GetValue<long>() ?? 0,
+                    Paths = n["f"]!.AsArray().Select(x => x!.GetValue<string>()).ToList()
+                };
+                item.PropertyChanged += (_, _) => UpdateAppCount();
+                apps.Add(item);
+            }
+            UpdateAppCount();
+            Log(T("apps_loaded", apps.Count));
+        }
+        finally { await h.StopAsync(); }
+    }
+
+    // ---------------- media folders (read from phone) ----------------
+
+    async void RefreshFolders_Click(object sender, RoutedEventArgs e) => await RunSafe(LoadMediaFolders);
+
+    static IEnumerable<string> ParseDirs(string output)
+    {
+        foreach (var raw in output.Split('\n'))
+        {
+            var l = raw.Trim();
+            if (l.Length < 2 || !l.EndsWith("/")) continue;
+            l = l.TrimEnd('/');
+            if (l.Length == 0 || l.StartsWith(".")) continue;
+            yield return l;
+        }
+    }
+
+    async Task LoadMediaFolders()
+    {
+        var found = new List<string>();
+        var r = await adb.RunOn(serial!, "shell", "ls", "-p", "/sdcard/");
+        foreach (var d in ParseDirs(r.Output))
+            if (d != "Android") found.Add(d);
+        var r2 = await adb.RunOn(serial!, "shell", "ls", "-p", "/sdcard/Android/media/");
+        foreach (var d in ParseDirs(r2.Output))
+            found.Add("Android/media/" + d);
+        if (found.Count == 0) found.AddRange(DefaultFolders);
+
+        var prev = new Dictionary<string, bool>();
+        foreach (var f in folders) prev[f.Key] = f.IsSelected;
+
+        int Rank(string f) { int i = Array.IndexOf(DefaultFolders, f); return i >= 0 ? i : 100; }
+        folders.Clear();
+        foreach (var f in found.Distinct().OrderBy(Rank).ThenBy(x => x, StringComparer.OrdinalIgnoreCase))
+        {
+            bool sel = prev.TryGetValue(f, out var was) ? was : DefaultFolders.Contains(f);
+            folders.Add(new PickItem { Key = f, Display = f, IsSelected = sel });
+        }
+        Log(T("folders_loaded", folders.Count));
+    }
+
+    // ---------------- device detection ----------------
+
     async Task RefreshDevice()
     {
         if (busy) return;
@@ -86,7 +285,9 @@ public partial class MainWindow : Window
         try { output = (await adb.Run("devices")).Output; }
         catch (Exception ex)
         {
-            SetDevice(false, Brushes.Red, "خطا در اجرای ADB: " + ex.Message);
+            devState = 3;
+            deviceErr = ex.Message;
+            RenderDevice();
             return;
         }
 
@@ -103,43 +304,66 @@ public partial class MainWindow : Window
 
         if (ok != null)
         {
-            if (ok != serial)
+            bool isNew = ok != serial;
+            if (isNew)
             {
                 serial = ok;
                 var model = (await adb.RunOn(ok, "shell", "getprop", "ro.product.model")).Output.Trim();
                 var ver = (await adb.RunOn(ok, "shell", "getprop", "ro.build.version.release")).Output.Trim();
                 deviceDesc = $"{model} (Android {ver})";
-                Log("گوشی شناسایی شد: " + deviceDesc);
+                Log(T("device_found", deviceDesc));
+                apps.Clear();
+                UpdateAppCount();
             }
-            SetDevice(true, Brushes.Green, "متصل: " + deviceDesc);
+            devState = 2;
+            RenderDevice();
+            if (isNew)
+            {
+                try { await LoadMediaFolders(); } catch { }
+            }
         }
-        else if (unauth != null)
-        {
-            serial = null;
-            SetDevice(false, Brushes.Orange, "روی گوشی پیام «Allow USB debugging» را تأیید کنید.");
-        }
-        else
-        {
-            serial = null;
-            SetDevice(false, Brushes.Red, "گوشی وصل نیست. کابل را وصل کنید و USB Debugging را روشن کنید.");
-        }
+        else if (unauth != null) { serial = null; devState = 1; RenderDevice(); }
+        else { serial = null; devState = 0; RenderDevice(); }
     }
 
+    /// هر کار طولانی از اینجا اجرا می‌شود؛ دکمه‌ی «لغو» توکن ct را لغو می‌کند.
     async Task RunSafe(Func<Task> work)
     {
         busy = true;
-        BackupBtn.IsEnabled = RestoreBtn.IsEnabled = false;
+        cts = new CancellationTokenSource();
+        ct = cts.Token;
+        adb.Token = ct;
+        BackupBtn.IsEnabled = RestoreBtn.IsEnabled = LoadAppsBtn.IsEnabled = RefreshFoldersBtn.IsEnabled = false;
+        CancelBtn.IsEnabled = true;
         Progress.IsIndeterminate = true;
+
+        bool cancelled = false;
         try { await work(); }
-        catch (Exception ex) { Log("خطا: " + ex.Message); }
-        finally
+        catch (OperationCanceledException) { cancelled = true; }
+        catch (Exception ex)
         {
-            busy = false;
-            Progress.IsIndeterminate = false;
-            Progress.Value = 0;
-            StatusText.Text = "";
-            await RefreshDevice();
+            if (ct.IsCancellationRequested) cancelled = true;
+            else Log(T("error", ex.Message));
         }
+
+        adb.Token = default;
+        if (cancelled)
+        {
+            Log(T("cancelled"));
+            if (serial != null)
+            {
+                // اگر برنامه‌ی کمکی هنوز روی گوشی در حال اجراست، آن را متوقف کن
+                try { await adb.RunOn(serial, "shell", "am", "stopservice", "-n", Pkg + "/.ServerService"); } catch { }
+            }
+        }
+        CancelBtn.IsEnabled = false;
+        cts.Dispose();
+        cts = null;
+        busy = false;
+        Progress.IsIndeterminate = false;
+        Progress.Value = 0;
+        StatusText.Text = "";
+        await RefreshDevice();
     }
 
     async void Backup_Click(object sender, RoutedEventArgs e) => await RunSafe(DoBackup);
@@ -151,11 +375,53 @@ public partial class MainWindow : Window
             log("   " + l.Trim());
     }
 
-    // ---------------- برنامه‌ی کمکی ----------------
+    // ---------------- update ----------------
+
+    async void Update_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy) return;
+        if (string.IsNullOrEmpty(Updater.Repo)) { Log(T("update_no_repo")); return; }
+        busy = true;
+        UpdateBtn.IsEnabled = false;
+        try
+        {
+            Log(T("update_checking"));
+            var info = await Updater.CheckAsync();
+            if (info.Version <= Updater.Current)
+            {
+                Log(T("update_none", Updater.Current.ToString(3)));
+                return;
+            }
+            var ask = MessageBox.Show(
+                T("update_prompt", Updater.Current.ToString(3), info.Version.ToString(3)),
+                T("btn_update"), MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes,
+                Loc.Persian ? MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign : MessageBoxOptions.None);
+            if (ask != MessageBoxResult.Yes) return;
+
+            var file = await Updater.DownloadAsync(info, p => SetProgress(p, 100, T("update_downloading", p)));
+            Log(T("update_restart"));
+            Updater.ApplyAndRestart(file);
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            Log(T("update_failed", ex.Message));
+        }
+        finally
+        {
+            busy = false;
+            UpdateBtn.IsEnabled = true;
+            StatusText.Text = "";
+            Progress.Value = 0;
+            await RefreshDevice();
+        }
+    }
+
+    // ---------------- helper app ----------------
 
     async Task<HelperClient?> ConnectHelper(bool needSmsRole)
     {
-        Log("نصب برنامه‌ی کمکی روی گوشی...");
+        Log(T("installing_helper"));
         var r = await adb.RunOn(serial!, "install", "-r", adb.HelperApk);
         if (!r.Output.Contains("Success"))
         {
@@ -166,9 +432,8 @@ public partial class MainWindow : Window
             }
             if (!r.Output.Contains("Success"))
             {
-                Log("نصب برنامه‌ی کمکی ناموفق بود:\n" + r.Output.Trim());
-                if (r.Output.Contains("USER_RESTRICTED"))
-                    Log("در گوشی‌های شیائومی/پوکو گزینه‌ی «Install via USB» را در Developer options روشن کنید.");
+                Log(T("helper_install_failed", r.Output.Trim()));
+                if (r.Output.Contains("USER_RESTRICTED")) Log(T("helper_xiaomi"));
                 return null;
             }
         }
@@ -182,61 +447,66 @@ public partial class MainWindow : Window
         await adb.RunOn(serial!, args.ToArray());
         await adb.RunOn(serial!, "forward", $"tcp:{HelperClient.Port}", $"tcp:{HelperClient.Port}");
 
-        Log("در حال اتصال به برنامه‌ی کمکی (گوشی باید روشن و بدون قفل باشد)...");
-        var client = new HelperClient(token);
+        Log(T("connecting_helper"));
+        var client = new HelperClient(token, ct);
         if (!await client.ConnectAsync(25))
         {
             client.Dispose();
-            Log("اتصال برقرار نشد. صفحه‌ی گوشی را باز کنید، اگر پنجره‌ی مجوز آمد تأیید کنید و دوباره امتحان کنید.");
+            Log(T("helper_connect_failed"));
             return null;
         }
         return client;
     }
 
-    // ---------------- پشتیبان‌گیری ----------------
+    // ---------------- backup ----------------
 
     async Task DoBackup()
     {
-        bool apps = ChkApps.IsChecked == true, media = ChkMedia.IsChecked == true;
+        bool doApps = ChkApps.IsChecked == true, media = ChkMedia.IsChecked == true;
         bool contacts = ChkContacts.IsChecked == true, sms = ChkSms.IsChecked == true;
-        if (!(apps || media || contacts || sms)) { Log("حداقل یک مورد را انتخاب کنید."); return; }
+        if (!(doApps || media || contacts || sms)) { Log(T("select_one")); return; }
 
         var baseDir = FolderBox.Text.Trim();
-        if (!Directory.Exists(baseDir)) { Log("پوشه‌ی ذخیره‌سازی معتبر نیست."); return; }
+        if (!Directory.Exists(baseDir)) { Log(T("folder_invalid")); return; }
         var root = Path.Combine(baseDir, "PhoneBackup_" + DateTime.Now.ToString("yyyyMMdd_HHmm"));
         Directory.CreateDirectory(root);
-        Log("پوشه‌ی بکاپ: " + root);
+        Log(T("backup_folder", root));
 
         if (contacts || sms)
         {
             using var h = await ConnectHelper(false);
-            if (h == null) Log("مخاطبین و پیامک‌ها انجام نشدند.");
+            if (h == null) Log(T("skip_contacts_sms"));
             else
             {
                 try
                 {
                     if (contacts)
                     {
-                        Log("بکاپ مخاطبین...");
-                        var list = await h.Stream("get_contacts", (i, n) => SetProgress(i, n, $"مخاطبین: {i} از {n}"));
+                        Log(T("backing_contacts"));
+                        var list = await h.Stream("get_contacts", (i, n) => SetProgress(i, n, T("list_progress", T("contacts"), i, n)));
                         SaveList(Path.Combine(root, "contacts.json"), list);
-                        Log($"مخاطبین: {list.Count} مورد ذخیره شد.");
+                        Log(T("contacts_saved", list.Count));
                     }
                     if (sms)
                     {
-                        Log("بکاپ پیامک‌ها...");
-                        var list = await h.Stream("get_sms", (i, n) => SetProgress(i, n, $"پیامک‌ها: {i} از {n}"));
+                        Log(T("backing_sms"));
+                        var list = await h.Stream("get_sms", (i, n) => SetProgress(i, n, T("list_progress", T("sms"), i, n)));
                         SaveList(Path.Combine(root, "sms.json"), list);
-                        Log($"پیامک‌ها: {list.Count} مورد ذخیره شد.");
+                        Log(T("sms_saved", list.Count));
                     }
                 }
                 finally { await h.StopAsync(); }
             }
         }
 
-        if (apps) await BackupApps(root);
+        if (doApps)
+        {
+            var selected = apps.Where(a => a.IsSelected).ToList();
+            if (selected.Count == 0) Log(T("apps_none_selected"));
+            else await BackupApps(root, selected);
+        }
         if (media) await BackupMedia(root);
-        Log("✅ پشتیبان‌گیری تمام شد.");
+        Log(T("backup_done"));
     }
 
     static void SaveList(string path, List<JsonNode> list)
@@ -246,50 +516,109 @@ public partial class MainWindow : Window
         File.WriteAllText(path, arr.ToJsonString(FileOpts), new UTF8Encoding(false));
     }
 
-    async Task BackupApps(string root)
+    static string SafeName(string name, string fallback)
     {
-        Log("بکاپ برنامه‌ها (فایل نصبی)...");
-        var r = await adb.RunOn(serial!, "shell", "pm", "list", "packages", "-3");
-        var pkgs = r.Output.Split('\n').Select(l => l.Trim())
-            .Where(l => l.StartsWith("package:")).Select(l => l.Substring(8).Trim())
-            .Where(p => p != Pkg).OrderBy(p => p).ToList();
-        Log($"{pkgs.Count} برنامه پیدا شد.");
+        var sb = new StringBuilder();
+        var bad = Path.GetInvalidFileNameChars();
+        foreach (var c in name)
+            sb.Append(bad.Contains(c) || char.IsControl(c) ? ' ' : c);
+        var s = string.Join(" ", sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries)).Trim().TrimEnd('.');
+        if (s.Length > 50) s = s.Substring(0, 50).Trim();
+        return s.Length == 0 ? fallback : s;
+    }
 
-        int i = 0, failed = 0;
-        foreach (var pkg in pkgs)
+    static string UniqueName(string name, HashSet<string> used)
+    {
+        if (used.Add(name)) return name;
+        for (int i = 2; ; i++)
         {
-            i++;
-            SetProgress(i, pkgs.Count, $"برنامه‌ها: {i} از {pkgs.Count} — {pkg}");
-            var pr = await adb.RunOn(serial!, "shell", "pm", "path", pkg);
-            var paths = pr.Output.Split('\n').Select(l => l.Trim())
-                .Where(l => l.StartsWith("package:")).Select(l => l.Substring(8).Trim()).ToList();
-            if (paths.Count == 0) { failed++; continue; }
-            var dir = Path.Combine(root, "apps", pkg);
-            Directory.CreateDirectory(dir);
-            foreach (var path in paths)
+            var n = $"{name} ({i})";
+            if (used.Add(n)) return n;
+        }
+    }
+
+    /// همه‌ی فایل‌ها در یک پوشه‌ی apps کنار هم: «نام برنامه.apk»؛
+    /// برنامه‌هایی که چند APK دارند (split) در یک فایل «نام برنامه.apks» جمع می‌شوند.
+    async Task BackupApps(string root, List<AppItem> selected)
+    {
+        Log(T("backing_apps", selected.Count));
+        var dir = Path.Combine(root, "apps");
+        Directory.CreateDirectory(dir);
+        var tmpRoot = Path.Combine(Path.GetTempPath(), "PhoneBackup_" + Guid.NewGuid().ToString("N"));
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int i = 0, failed = 0;
+        try
+        {
+            foreach (var app in selected)
             {
-                var res = await adb.RunOn(serial!, "pull", path, dir);
-                if (res.Code != 0) { failed++; Log($"   خطا در {pkg}: {res.Output.Trim()}"); break; }
+                ct.ThrowIfCancellationRequested();
+                i++;
+                SetProgress(i, selected.Count, T("apps_progress", i, selected.Count, app.Name));
+                var tmp = Path.Combine(tmpRoot, i.ToString());
+                Directory.CreateDirectory(tmp);
+
+                var local = new List<string>();
+                bool pulled = true;
+                foreach (var remote in app.Paths)
+                {
+                    var fname = remote.Substring(remote.LastIndexOf('/') + 1);
+                    var dest = Path.Combine(tmp, fname);
+                    var res = await adb.RunOn(serial!, "pull", remote, dest);
+                    if (res.Code != 0 || !File.Exists(dest))
+                    {
+                        Log(T("app_pull_failed", app.Name, res.Output.Trim().Replace("\r", "").Replace("\n", " ")));
+                        pulled = false;
+                        break;
+                    }
+                    local.Add(dest);
+                }
+                if (!pulled || local.Count == 0) { failed++; continue; }
+
+                var baseName = UniqueName(SafeName(app.Name, app.Package), used);
+                if (local.Count == 1)
+                {
+                    File.Move(local[0], Path.Combine(dir, baseName + ".apk"), true);
+                }
+                else
+                {
+                    var zipPath = Path.Combine(dir, baseName + ".apks");
+                    if (File.Exists(zipPath)) File.Delete(zipPath);
+                    using var za = ZipFile.Open(zipPath, ZipArchiveMode.Create);
+                    foreach (var f in local)
+                        za.CreateEntryFromFile(f, Path.GetFileName(f), CompressionLevel.NoCompression);
+                }
             }
         }
-        Log($"برنامه‌ها تمام شد. ({pkgs.Count - failed} موفق، {failed} ناموفق)");
+        finally
+        {
+            try { Directory.Delete(tmpRoot, true); } catch { }
+        }
+        Log(T("apps_done", selected.Count - failed, failed));
     }
 
     async Task BackupMedia(string root)
     {
+        var sel = folders.Where(x => x.IsSelected).Select(x => x.Key).ToList();
+        if (sel.Count == 0) { Log(T("media_none_selected")); return; }
         var mediaDir = Path.Combine(root, "media");
         Directory.CreateDirectory(mediaDir);
-        foreach (var d in MediaFolders)
+        foreach (var rel in sel)
         {
-            Log($"کپی /sdcard/{d} (ممکن است طول بکشد)...");
-            StatusText.Text = $"در حال کپی {d} ...";
+            ct.ThrowIfCancellationRequested();
+            int slash = rel.LastIndexOf('/');
+            var localParent = slash < 0
+                ? mediaDir
+                : Path.Combine(mediaDir, rel.Substring(0, slash).Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(localParent);
+            Log(T("copying_media", rel));
+            StatusText.Text = T("copying_status", rel);
             Progress.IsIndeterminate = true;
-            var r = await adb.RunOnStream(serial!, l => PullLine(Log, l), "pull", "-a", "/sdcard/" + d, mediaDir);
-            if (r.Code != 0 && r.Output.Contains("does not exist")) Log($"   پوشه‌ی {d} روی گوشی نیست.");
+            var r = await adb.RunOnStream(serial!, l => PullLine(Log, l), "pull", "-a", "/sdcard/" + rel, localParent);
+            if (r.Code != 0 && r.Output.Contains("does not exist")) Log(T("media_missing", rel));
         }
     }
 
-    // ---------------- بازیابی ----------------
+    // ---------------- restore ----------------
 
     static string? ResolveBackupRoot(string folder)
     {
@@ -302,51 +631,102 @@ public partial class MainWindow : Window
             .OrderByDescending(d => Path.GetFileName(d)).FirstOrDefault(IsBackup);
     }
 
+    static List<string> BackupMediaFolders(string mediaDir)
+    {
+        var list = new List<string>();
+        if (!Directory.Exists(mediaDir)) return list;
+        foreach (var d in Directory.GetDirectories(mediaDir))
+        {
+            var n = Path.GetFileName(d);
+            if (n == "Android")
+            {
+                var m = Path.Combine(d, "media");
+                if (Directory.Exists(m))
+                    foreach (var s in Directory.GetDirectories(m))
+                        list.Add("Android/media/" + Path.GetFileName(s));
+            }
+            else list.Add(n);
+        }
+        return list;
+    }
+
+    static string FileSizeText(long size) => size >= 1024 * 1024
+        ? (size / 1024.0 / 1024.0).ToString("0.0") + " MB"
+        : (size / 1024.0).ToString("0") + " KB";
+
     async Task DoRestore()
     {
-        bool apps = ChkApps.IsChecked == true, media = ChkMedia.IsChecked == true;
+        bool doApps = ChkApps.IsChecked == true, media = ChkMedia.IsChecked == true;
         bool contacts = ChkContacts.IsChecked == true, sms = ChkSms.IsChecked == true;
 
         var root = ResolveBackupRoot(FolderBox.Text.Trim());
-        if (root == null) { Log("در این پوشه بکاپی پیدا نشد. پوشه‌ی PhoneBackup_... را انتخاب کنید."); return; }
+        if (root == null) { Log(T("no_backup_found")); return; }
 
-        bool hasApps = apps && Directory.Exists(Path.Combine(root, "apps"));
-        bool hasMedia = media && Directory.Exists(Path.Combine(root, "media"));
+        var appsDir = Path.Combine(root, "apps");
+        var mediaDir = Path.Combine(root, "media");
         bool hasC = contacts && File.Exists(Path.Combine(root, "contacts.json"));
         bool hasS = sms && File.Exists(Path.Combine(root, "sms.json"));
-        if (!(hasApps || hasMedia || hasC || hasS)) { Log("از موارد انتخاب‌شده چیزی در این بکاپ نیست."); return; }
 
-        var ask = MessageBox.Show(
-            $"بازیابی از:\n{root}\n\nروی گوشی «{deviceDesc}» انجام شود؟",
-            "تأیید بازیابی", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No,
-            MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
-        if (ask != MessageBoxResult.Yes) return;
-        Log("بازیابی از: " + root);
+        var appItems = new List<PickItem>();
+        if (doApps && Directory.Exists(appsDir))
+        {
+            foreach (var f in Directory.GetFiles(appsDir)
+                         .Where(x => x.EndsWith(".apk", StringComparison.OrdinalIgnoreCase) ||
+                                     x.EndsWith(".apks", StringComparison.OrdinalIgnoreCase))
+                         .OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase))
+            {
+                appItems.Add(new PickItem
+                {
+                    Key = f,
+                    Display = $"{Path.GetFileNameWithoutExtension(f)}   ({Path.GetExtension(f).ToLowerInvariant()}, {FileSizeText(new FileInfo(f).Length)})",
+                    IsSelected = true
+                });
+            }
+        }
+        var mediaItems = new List<PickItem>();
+        if (media)
+            foreach (var rel in BackupMediaFolders(mediaDir))
+                mediaItems.Add(new PickItem { Key = rel, Display = rel, IsSelected = true });
+
+        if (!(appItems.Count > 0 || mediaItems.Count > 0 || hasC || hasS)) { Log(T("nothing_to_restore")); return; }
+
+        var also = new List<string>();
+        if (hasC) also.Add(T("contacts"));
+        if (hasS) also.Add(T("sms"));
+        var dlg = new RestoreWindow(root, deviceDesc ?? "", appItems, mediaItems,
+            also.Count > 0 ? T("restore_also", string.Join(", ", also)) : "") { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        var chosenApps = appItems.Where(it => it.IsSelected).Select(it => it.Key).ToList();
+        var chosenMedia = mediaItems.Where(it => it.IsSelected).Select(it => it.Key).ToList();
+        if (chosenApps.Count == 0 && chosenMedia.Count == 0 && !hasC && !hasS) { Log(T("nothing_to_restore")); return; }
+        Log(T("restoring_from", root));
 
         if (hasC || hasS)
         {
             using var h = await ConnectHelper(hasS);
-            if (h == null) Log("مخاطبین و پیامک‌ها انجام نشدند.");
+            if (h == null) Log(T("skip_contacts_sms"));
             else
             {
                 try
                 {
-                    if (hasC) await RestoreList(h, Path.Combine(root, "contacts.json"), "put_contacts", 200, "مخاطبین");
+                    if (hasC) await RestoreList(h, Path.Combine(root, "contacts.json"), "put_contacts", 200, T("contacts"));
                     if (hasS)
                     {
-                        Log("روی گوشی پنجره‌ی «برنامه پیامک پیش‌فرض» را تأیید کنید (تا ۲ دقیقه صبر می‌کنم)...");
+                        Log(T("sms_wait_default"));
                         bool ok = false;
                         for (int i = 0; i < 60 && !ok; i++)
                         {
+                            ct.ThrowIfCancellationRequested();
                             await h.PingAsync();
                             ok = h.DefaultSms;
-                            if (!ok) await Task.Delay(2000);
+                            if (!ok) await Task.Delay(2000, ct);
                         }
-                        if (!ok) Log("تأیید نشد؛ پیامک‌ها بازیابی نشدند.");
+                        if (!ok) Log(T("sms_not_confirmed"));
                         else
                         {
-                            await RestoreList(h, Path.Combine(root, "sms.json"), "put_sms", 500, "پیامک‌ها");
-                            Log("⚠ حالا برنامه‌ی پیامک قبلی خود را دوباره پیش‌فرض کنید (صفحه‌ی تنظیمات روی گوشی باز می‌شود).");
+                            await RestoreList(h, Path.Combine(root, "sms.json"), "put_sms", 500, T("sms"));
+                            Log(T("sms_revert"));
                             await adb.RunOn(serial!, "shell", "am", "start", "-a", "android.settings.MANAGE_DEFAULT_APPS_SETTINGS");
                         }
                     }
@@ -355,9 +735,9 @@ public partial class MainWindow : Window
             }
         }
 
-        if (hasApps) await RestoreApps(Path.Combine(root, "apps"));
-        if (hasMedia) await RestoreMedia(Path.Combine(root, "media"));
-        Log("✅ بازیابی تمام شد.");
+        if (chosenApps.Count > 0) await RestoreApps(chosenApps);
+        if (chosenMedia.Count > 0) await RestoreMedia(mediaDir, chosenMedia);
+        Log(T("restore_done"));
     }
 
     static IEnumerable<JsonArray> Chunks(JsonArray src, int size)
@@ -373,55 +753,90 @@ public partial class MainWindow : Window
     async Task RestoreList(HelperClient h, string file, string cmd, int chunk, string title)
     {
         var arr = JsonNode.Parse(File.ReadAllText(file, Encoding.UTF8))!.AsArray();
-        Log($"بازیابی {title} ({arr.Count} مورد)...");
+        Log(T("restore_list", title, arr.Count));
         int done = 0, added = 0, skipped = 0;
         bool first = true;
         foreach (var part in Chunks(arr, chunk))
         {
+            ct.ThrowIfCancellationRequested();
             int n = part.Count;
             var resp = await h.Request(new JsonObject { ["cmd"] = cmd, ["first"] = first, ["data"] = part });
             first = false;
             added += resp["added"]?.GetValue<int>() ?? 0;
             skipped += resp["skipped"]?.GetValue<int>() ?? 0;
             done += n;
-            SetProgress(done, arr.Count, $"{title}: {done} از {arr.Count}");
+            SetProgress(done, arr.Count, T("list_progress", title, done, arr.Count));
         }
-        Log($"{title}: {added} مورد اضافه شد، {skipped} مورد تکراری رد شد.");
+        Log(T("list_result", title, added, skipped));
     }
 
-    async Task RestoreApps(string appsDir)
+    /// فایل‌های انتخاب‌شده‌ی .apk و .apks را نصب می‌کند.
+    async Task RestoreApps(List<string> files)
     {
-        var dirs = Directory.GetDirectories(appsDir).OrderBy(d => d).ToList();
-        Log($"نصب {dirs.Count} برنامه...");
+        Log(T("installing_apps", files.Count));
+        var tmpRoot = Path.Combine(Path.GetTempPath(), "PhoneBackup_" + Guid.NewGuid().ToString("N"));
         int i = 0, okCount = 0;
-        foreach (var dir in dirs)
+        bool hinted = false;
+        try
         {
-            i++;
-            var name = Path.GetFileName(dir);
-            SetProgress(i, dirs.Count, $"برنامه‌ها: {i} از {dirs.Count} — {name}");
-            var apks = Directory.GetFiles(dir, "*.apk");
-            if (apks.Length == 0) continue;
-            var args = new List<string> { "install-multiple", "-r" };
-            args.AddRange(apks);
-            var r = await adb.RunOn(serial!, args.ToArray());
-            if (r.Output.Contains("Success")) okCount++;
-            else Log($"   ✗ {name}: {r.Output.Trim().Replace("\r", "").Replace("\n", " ")}");
+            foreach (var f in files)
+            {
+                ct.ThrowIfCancellationRequested();
+                i++;
+                var name = Path.GetFileNameWithoutExtension(f);
+                SetProgress(i, files.Count, T("apps_progress", i, files.Count, name));
+                var tmp = Path.Combine(tmpRoot, i.ToString());
+                Directory.CreateDirectory(tmp);
+
+                var apks = new List<string>();
+                if (f.EndsWith(".apks", StringComparison.OrdinalIgnoreCase))
+                {
+                    ZipFile.ExtractToDirectory(f, tmp);
+                    apks.AddRange(Directory.GetFiles(tmp, "*.apk", SearchOption.AllDirectories));
+                }
+                else
+                {
+                    var dest = Path.Combine(tmp, "app.apk");
+                    File.Copy(f, dest, true);
+                    apks.Add(dest);
+                }
+                if (apks.Count == 0) continue;
+
+                var args = new List<string> { "install-multiple", "-r" };
+                args.AddRange(apks);
+                var r = await adb.RunOn(serial!, args.ToArray());
+                if (r.Output.Contains("Success")) okCount++;
+                else
+                {
+                    Log(T("install_failed", name, r.Output.Trim().Replace("\r", "").Replace("\n", " ")));
+                    if (!hinted && r.Output.Contains("USER_RESTRICTED")) { hinted = true; Log(T("xiaomi_install_hint")); }
+                }
+            }
         }
-        Log($"برنامه‌ها: {okCount} از {dirs.Count} نصب شد.");
+        finally
+        {
+            try { Directory.Delete(tmpRoot, true); } catch { }
+        }
+        Log(T("apps_installed", okCount, files.Count));
     }
 
-    async Task RestoreMedia(string mediaDir)
+    async Task RestoreMedia(string mediaDir, List<string> rels)
     {
-        foreach (var dir in Directory.GetDirectories(mediaDir))
+        foreach (var rel in rels)
         {
-            var name = Path.GetFileName(dir);
-            Log($"ارسال {name} به گوشی (ممکن است طول بکشد)...");
-            StatusText.Text = $"در حال ارسال {name} ...";
+            ct.ThrowIfCancellationRequested();
+            var local = Path.Combine(mediaDir, rel.Replace('/', Path.DirectorySeparatorChar));
+            if (!Directory.Exists(local)) continue;
+            int slash = rel.LastIndexOf('/');
+            var remoteParent = "/sdcard/" + (slash < 0 ? "" : rel.Substring(0, slash + 1));
+            await adb.RunOn(serial!, "shell", "mkdir", "-p", remoteParent);
+            Log(T("sending_media", rel));
+            StatusText.Text = T("sending_status", rel);
             Progress.IsIndeterminate = true;
-            await adb.RunOnStream(serial!, l => PullLine(Log, l), "push", dir, "/sdcard/");
+            await adb.RunOnStream(serial!, l => PullLine(Log, l), "push", local, remoteParent);
         }
         await adb.RunOn(serial!, "shell", "content", "call", "--uri", "content://media/",
             "--method", "scan_volume", "--arg", "external_primary");
-        Log("اگر فایل‌ها در گالری دیر پیدا شدند، یک‌بار گوشی را ری‌استارت کنید.");
+        Log(T("media_rescan_hint"));
     }
 }

@@ -1,0 +1,18 @@
+<Window x:Class="PhoneBackup.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Icon="Resources/app.ico"
+        Width="440" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" FontFamily="Segoe UI, Tahoma" FontSize="14">
+    <StackPanel Margin="24">
+        <TextBlock x:Name="AppTitle" FontSize="20" FontWeight="Bold" TextWrapping="Wrap" />
+        <TextBlock x:Name="VersionText" Margin="0,6,0,0" Foreground="#666" />
+        <TextBlock x:Name="DescText" TextWrapping="Wrap" Margin="0,14,0,0" />
+        <TextBlock x:Name="CreatorText" Margin="0,14,0,0" FontWeight="SemiBold" />
+        <TextBlock Margin="0,6,0,0" FlowDirection="LeftToRight" HorizontalAlignment="Left">
+            <Hyperlink x:Name="RepoLink" Click="Repo_Click"><Run x:Name="RepoRun" /></Hyperlink>
+        </TextBlock>
+        <Button x:Name="CloseBtn" HorizontalAlignment="Center" Padding="28,6" Margin="0,20,0,0"
+                IsCancel="True" Click="Close_Click" />
+    </StackPanel>
+</Window>
