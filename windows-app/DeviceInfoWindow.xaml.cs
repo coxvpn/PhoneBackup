@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -20,6 +21,8 @@ public partial class DeviceInfoWindow : Window
     readonly List<InfoRow> all = new();
     string firmwareUrl = "";
     string model = "";
+    string csc = "";
+    bool busy;
 
     static string T(string k, params object[] a) => Loc.T(k, a);
 
@@ -36,6 +39,11 @@ public partial class DeviceInfoWindow : Window
         SaveBtn.Content = T("btn_info_save");
         ImeiBtn.Content = T("btn_info_imei");
         FirmwareBtn.Content = T("btn_info_firmware");
+        GrpActions.Header = T("grp_device_actions");
+        RecoveryBtn.Content = T("btn_recovery");
+        DownloadModeBtn.Content = T("btn_download_mode");
+        FactoryResetBtn.Content = T("btn_factory_reset");
+        CscGuideBtn.Content = T("btn_csc_guide");
         CloseBtn.Content = T("about_close");
         if (InfoList.View is GridView gv && gv.Columns.Count >= 2)
         {
@@ -50,9 +58,11 @@ public partial class DeviceInfoWindow : Window
         Loaded += async (_, _) => await Load();
     }
 
-    void SetBusy(bool busy)
+    void SetBusy(bool v)
     {
-        RefreshBtn.IsEnabled = ImeiBtn.IsEnabled = !busy;
+        busy = v;
+        RefreshBtn.IsEnabled = ImeiBtn.IsEnabled = RecoveryBtn.IsEnabled =
+            DownloadModeBtn.IsEnabled = FactoryResetBtn.IsEnabled = !v;
     }
 
     async System.Threading.Tasks.Task Load()
@@ -66,6 +76,7 @@ public partial class DeviceInfoWindow : Window
             all.AddRange(res.Rows);
             firmwareUrl = res.FirmwareUrl;
             model = all.FirstOrDefault(r => r.Key == "model")?.Value ?? "";
+            csc = all.FirstOrDefault(r => r.Key == "csc")?.Value ?? "";
             Render();
             FirmwareBtn.Visibility = firmwareUrl.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             StatusText.Text = T("info_done");
@@ -156,6 +167,68 @@ public partial class DeviceInfoWindow : Window
         {
             try { Clipboard.SetText(r.Value); StatusText.Text = T("info_copied"); } catch { }
         }
+    }
+
+    bool Confirm(string msg, MessageBoxImage icon = MessageBoxImage.Warning)
+    {
+        return MessageBox.Show(msg, T("confirm_title"), MessageBoxButton.YesNo, icon, MessageBoxResult.No,
+            Loc.Persian ? MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign : MessageBoxOptions.None) == MessageBoxResult.Yes;
+    }
+
+    async void Recovery_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy) return;
+        if (!Confirm(T("confirm_recovery"), MessageBoxImage.Question)) return;
+        SetBusy(true);
+        try
+        {
+            await adb.RunOn(serial, "reboot", "recovery");
+            StatusText.Text = T("recovery_sent");
+        }
+        catch (Exception ex) { StatusText.Text = T("info_failed", ex.Message); }
+        finally { SetBusy(false); }
+    }
+
+    async void DownloadMode_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy) return;
+        if (!Confirm(T("confirm_download_mode"), MessageBoxImage.Question)) return;
+        SetBusy(true);
+        try
+        {
+            await adb.RunOn(serial, "reboot", "download");
+            StatusText.Text = T("download_mode_sent");
+        }
+        catch (Exception ex) { StatusText.Text = T("info_failed", ex.Message); }
+        finally { SetBusy(false); }
+    }
+
+    async void FactoryReset_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy) return;
+        if (!Confirm(T("confirm_factory_reset_1"), MessageBoxImage.Warning)) return;
+        if (!Confirm(T("confirm_factory_reset_2", model), MessageBoxImage.Stop)) return;
+        SetBusy(true);
+        StatusText.Text = T("factory_reset_running");
+        try
+        {
+            var r = await adb.RunOn(serial, "shell", "am", "broadcast", "-a", "android.intent.action.MASTER_CLEAR");
+            if (r.Output.Contains("Broadcast completed") || r.Output.Trim().Length == 0)
+                StatusText.Text = T("factory_reset_sent");
+            else
+                StatusText.Text = T("factory_reset_maybe_blocked");
+        }
+        catch (Exception ex) { StatusText.Text = T("info_failed", ex.Message); }
+        finally { SetBusy(false); }
+    }
+
+    void CscGuide_Click(object sender, RoutedEventArgs e)
+    {
+        MessageBox.Show(T("csc_guide_text", csc.Length > 0 ? csc : "?"), T("btn_csc_guide"),
+            MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK,
+            Loc.Persian ? MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign : MessageBoxOptions.None);
+        if (firmwareUrl.Length > 0)
+            try { Process.Start(new ProcessStartInfo(firmwareUrl) { UseShellExecute = true }); } catch { }
     }
 
     void Firmware_Click(object sender, RoutedEventArgs e)

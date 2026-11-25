@@ -83,6 +83,8 @@ public partial class MainWindow : Window
         try { adb.Extract(); }
         catch (Exception ex) { Log(T("adb_prep_error", ex.Message)); }
 
+        SizeChanged += (_, _) => { };
+        Loaded += (_, _) => FitToScreen();
         timer.Tick += async (_, _) => await RefreshDevice();
         Loaded += async (_, _) =>
         {
@@ -111,6 +113,7 @@ public partial class MainWindow : Window
         RefreshFoldersBtn.Content = T("btn_refresh_folders");
         GrpApps.Header = T("grp_apps");
         LoadAppsBtn.Content = T("btn_load_apps");
+        InstallFolderBtn.Content = T("btn_install_folder");
         SelAllBtn.Content = T("btn_sel_all");
         SelNoneBtn.Content = T("btn_sel_none");
         SearchLabel.Text = T("search");
@@ -185,7 +188,7 @@ public partial class MainWindow : Window
     void SetButtons(bool enabled)
     {
         BackupBtn.IsEnabled = RestoreBtn.IsEnabled = LoadAppsBtn.IsEnabled =
-            RefreshFoldersBtn.IsEnabled = UninstallBtn.IsEnabled = InfoBtn.IsEnabled = enabled;
+            RefreshFoldersBtn.IsEnabled = UninstallBtn.IsEnabled = InfoBtn.IsEnabled = InstallFolderBtn.IsEnabled = enabled;
     }
 
     void SetProgress(int value, int max, string text)
@@ -194,6 +197,19 @@ public partial class MainWindow : Window
         Progress.Maximum = Math.Max(1, max);
         Progress.Value = value;
         StatusText.Text = text;
+    }
+
+    /// اگر صفحه‌نمایش کوچک‌تر از اندازه‌ی پیش‌فرض پنجره باشد، خودکار کوچک و وسط صفحه می‌شود؛
+    /// محتوای باقی‌مانده هم با اسکرول قابل دیدن است (نیازی به کشیدن گوشه نیست).
+    void FitToScreen()
+    {
+        var wa = SystemParameters.WorkArea;
+        double w = Math.Min(Width, wa.Width - 20);
+        double h = Math.Min(Height, wa.Height - 20);
+        Width = Math.Max(MinWidth, w);
+        Height = Math.Max(MinHeight, h);
+        Left = Math.Max(wa.Left, wa.Left + (wa.Width - Width) / 2);
+        Top = Math.Max(wa.Top, wa.Top + (wa.Height - Height) / 2);
     }
 
     void Browse_Click(object sender, RoutedEventArgs e)
@@ -302,7 +318,7 @@ public partial class MainWindow : Window
         folders.Clear();
         foreach (var f in found.Distinct().OrderBy(Rank).ThenBy(x => x, StringComparer.OrdinalIgnoreCase))
         {
-            bool sel = prev.TryGetValue(f, out var was) ? was : DefaultFolders.Contains(f);
+            bool sel = prev.TryGetValue(f, out var was) && was;
             folders.Add(new PickItem { Key = f, Display = f, IsSelected = sel });
         }
         Log(T("folders_loaded", folders.Count));
@@ -979,6 +995,32 @@ public partial class MainWindow : Window
         }
         UpdateAppCount();
         Log(T("uninstall_done", done, bad));
+    }
+
+    async void InstallFolder_Click(object sender, RoutedEventArgs e) => await RunSafe(InstallFromFolder);
+
+    async Task InstallFromFolder()
+    {
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = T("btn_install_folder") };
+        if (dlg.ShowDialog(this) != true) return;
+        var files = Directory.GetFiles(dlg.FolderName)
+            .Where(f => f.EndsWith(".apk", StringComparison.OrdinalIgnoreCase) ||
+                        f.EndsWith(".apks", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase).ToList();
+        if (files.Count == 0) { Log(T("install_folder_empty", dlg.FolderName)); return; }
+
+        var items = files.Select(f => new PickItem
+        {
+            Key = f,
+            Display = $"{Path.GetFileNameWithoutExtension(f)}   ({Path.GetExtension(f).ToLowerInvariant()}, {FileSizeText(new FileInfo(f).Length)})",
+            IsSelected = true
+        }).ToList();
+
+        var pick = new AppPickWindow(T("install_folder_pick_title", dlg.FolderName), items) { Owner = this };
+        if (pick.ShowDialog() != true) return;
+        var chosen = items.Where(it => it.IsSelected).Select(it => it.Key).ToList();
+        if (chosen.Count == 0) return;
+        await RestoreApps(chosen);
     }
 
     void OpenFolder_Click(object sender, RoutedEventArgs e)

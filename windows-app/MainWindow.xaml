@@ -5,6 +5,7 @@
         Width="920" Height="900" MinWidth="740" MinHeight="700"
         FontFamily="Segoe UI, Tahoma" FontSize="14"
         WindowStartupLocation="CenterScreen">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -43,10 +44,10 @@
 
         <GroupBox x:Name="GrpWhat" Grid.Row="1" Padding="8" Margin="0,0,0,10">
             <WrapPanel>
-                <CheckBox x:Name="ChkApps" IsChecked="True" Margin="0,0,24,0" />
-                <CheckBox x:Name="ChkMedia" IsChecked="True" Margin="0,0,24,0" />
-                <CheckBox x:Name="ChkContacts" IsChecked="True" Margin="0,0,24,0" />
-                <CheckBox x:Name="ChkSms" IsChecked="True" />
+                <CheckBox x:Name="ChkApps" IsChecked="False" Margin="0,0,24,0" />
+                <CheckBox x:Name="ChkMedia" IsChecked="False" Margin="0,0,24,0" />
+                <CheckBox x:Name="ChkContacts" IsChecked="False" Margin="0,0,24,0" />
+                <CheckBox x:Name="ChkSms" IsChecked="False" />
             </WrapPanel>
         </GroupBox>
 
@@ -83,6 +84,7 @@
                 </Grid.RowDefinitions>
                 <WrapPanel Margin="0,0,0,8">
                     <Button x:Name="LoadAppsBtn" Padding="12,4" Margin="0,0,8,4" IsEnabled="False" Click="LoadApps_Click" />
+                    <Button x:Name="InstallFolderBtn" Padding="12,4" Margin="0,0,8,4" IsEnabled="False" Click="InstallFolder_Click" />
                     <Button x:Name="SelAllBtn" Padding="12,4" Margin="0,0,8,4" Click="SelAll_Click" />
                     <Button x:Name="SelNoneBtn" Padding="12,4" Margin="0,0,8,4" Click="SelNone_Click" />
                     <CheckBox x:Name="ShowUserChk" IsChecked="True" VerticalAlignment="Center" Margin="8,0,8,4"
@@ -139,6 +141,7 @@
         </StackPanel>
 
         <TextBox x:Name="LogBox" Grid.Row="7" IsReadOnly="True" TextWrapping="Wrap"
-                 VerticalScrollBarVisibility="Auto" Background="#FAFAFA" />
+                 VerticalScrollBarVisibility="Auto" Background="#FAFAFA" MinHeight="120" />
     </Grid>
+    </ScrollViewer>
 </Window>

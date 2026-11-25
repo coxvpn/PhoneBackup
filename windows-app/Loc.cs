@@ -256,6 +256,30 @@ public static class Loc
         ["bat_cold"] = ("Cold", "سرد"),
         ["bat_unknown"] = ("Unknown", "نامشخص"),
 
+        // ---- install from folder ----
+        ["btn_install_folder"] = ("Install APKs from a PC folder", "نصب چند APK از فولدر کامپیوتر"),
+        ["install_folder_empty"] = ("No .apk / .apks files found in: {0}", "فایل APK/.apks در این پوشه پیدا نشد: {0}"),
+        ["install_folder_pick_title"] = ("Apps found in: {0}", "برنامه‌های پیدا‌شده در: {0}"),
+        ["install_folder_pick_title_bar"] = ("Choose apps to install", "انتخاب برنامه‌ها برای نصب"),
+
+        // ---- device actions ----
+        ["grp_device_actions"] = ("Device actions", "عملیات گوشی"),
+        ["btn_recovery"] = ("Reboot to Recovery", "ریبوت به Recovery"),
+        ["btn_download_mode"] = ("Reboot to Download mode", "ریبوت به Download mode (Odin)"),
+        ["btn_factory_reset"] = ("Factory reset", "فکتوری ریست"),
+        ["btn_csc_guide"] = ("Change CSC guide", "راهنمای تغییر CSC"),
+        ["confirm_title"] = ("Confirm", "تأیید"),
+        ["confirm_recovery"] = ("Reboot the phone into Recovery mode now?", "گوشی الان به حالت Recovery ریبوت شود؟"),
+        ["recovery_sent"] = ("Command sent. The phone is rebooting into Recovery.", "دستور ارسال شد. گوشی در حال ریبوت به Recovery است."),
+        ["confirm_download_mode"] = ("Reboot the phone into Download (Odin) mode now?", "گوشی الان به حالت Download (Odin) ریبوت شود؟"),
+        ["download_mode_sent"] = ("Command sent. The phone is rebooting into Download mode.", "دستور ارسال شد. گوشی در حال ریبوت به Download mode است."),
+        ["confirm_factory_reset_1"] = ("⚠ FACTORY RESET\n\nThis erases ALL data on the phone: apps, photos, messages, accounts - everything. This cannot be undone.\n\nMake sure you already have a backup. Continue?", "⚠ فکتوری ریست\n\nاین کار همه‌ی اطلاعات گوشی را پاک می‌کند: برنامه‌ها، عکس‌ها، پیامک‌ها، حساب‌ها - همه‌چیز. این کار برگشت‌ناپذیر است.\n\nمطمئن شو قبلاً بکاپ گرفته‌ای. ادامه می‌دهی؟"),
+        ["confirm_factory_reset_2"] = ("Last confirmation: erase phone \"{0}\" completely?", "تأیید نهایی: گوشی «{0}» کاملاً پاک شود؟"),
+        ["factory_reset_running"] = ("Sending factory reset command...", "در حال ارسال دستور فکتوری ریست..."),
+        ["factory_reset_sent"] = ("Command sent. If the phone does not reset within a minute, it blocked the command - use Settings > General management > Reset instead.", "دستور ارسال شد. اگر تا یک دقیقه گوشی ریست نشد، یعنی دستور را مسدود کرده - از مسیر تنظیمات > مدیریت کلی > بازنشانی استفاده کن."),
+        ["factory_reset_maybe_blocked"] = ("The phone may have blocked this command on newer Android versions. Use Settings > General management > Reset > Factory data reset instead.", "ممکن است گوشی این دستور را در نسخه‌های جدید اندروید مسدود کرده باشد. از مسیر تنظیمات > مدیریت کلی > بازنشانی > بازنشانی اطلاعات کارخانه استفاده کن."),
+        ["csc_guide_text"] = ("Current CSC: {0}\n\nOn modern Samsung phones there is no ADB command that changes CSC. A real CSC change needs re-flashing the phone with Odin using a CSC file for the target region (HOME_CSC keeps your data, CSC erases it).\n\nSteps:\n1. Download the firmware for the target CSC from the page that will now open (or samfw.com / Frija).\n2. Install Odin on the PC and Samsung USB drivers.\n3. Boot the phone into Download mode (button above), connect the cable.\n4. In Odin, load BL/AP/CP in their slots and the CSC file in the CSC slot (not HOME_CSC) and press Start.\n\nThis is a firmware flash, not something this app performs automatically; a wrong file can make the phone unusable, so only do this if you are comfortable with Odin.", "CSC فعلی: {0}\n\nروی گوشی‌های جدید سامسونگ هیچ دستور ADB‌ای وجود ندارد که CSC را واقعاً عوض کند. تغییر واقعی CSC نیاز به فلش‌کردن گوشی با Odin و فایل CSC مربوط به منطقه‌ی هدف دارد (HOME_CSC اطلاعات را نگه می‌دارد، CSC پاکشان می‌کند).\n\nمراحل:\n۱. فریمور مربوط به CSC موردنظر را از صفحه‌ای که الان باز می‌شود (یا samfw.com یا Frija) دانلود کن.\n۲. Odin و درایور USB سامسونگ را روی کامپیوتر نصب کن.\n۳. گوشی را با دکمه‌ی بالا وارد Download mode کن و کابل را وصل کن.\n۴. در Odin فایل‌های BL/AP/CP را در جایگاه خودشان و فایل CSC (نه HOME_CSC) را در جایگاه CSC بگذار و Start را بزن.\n\nاین کار فلش‌کردن فریمور است و این برنامه آن را خودکار انجام نمی‌دهد؛ فایل اشتباه می‌تواند گوشی را از کار بیندازد، پس فقط اگر با Odin راحتی این کار را انجام بده."),
+
         // ---- about ----
         ["about_title"] = ("About", "درباره برنامه"),
         ["about_desc"] = ("Back up and restore APK files, contacts, SMS, photos, videos and music of an Android phone from Windows.", "پشتیبان‌گیری و بازیابی فایل نصبی برنامه‌ها، مخاطبین، پیامک‌ها، عکس، فیلم و موزیک گوشی اندروید از ویندوز."),

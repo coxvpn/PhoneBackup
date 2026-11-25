@@ -21,6 +21,9 @@ The file `VERSION` holds the major.minor number (e.g. `1.4`). Every build append
 6. *Restore* opens a window where you choose which apps and media folders to put back. *Cancel* stops any running job.
 
 ## More features
+- First run starts with nothing ticked; the window auto-fits small screens on launch and the whole form scrolls if it is still taller than your screen.
+- *Install APKs from a PC folder* (next to "Load app list"): pick any folder on your computer and tick which .apk/.apks files to install on the phone.
+- Phone info window: *Reboot to Recovery* and *Reboot to Download mode* are standard ADB commands. *Factory reset* wipes the phone via ADB (two confirmations; on some Android versions it may be blocked and the on-screen Settings reset is suggested instead). *Change CSC guide* explains the Odin-based steps, since modern phones have no ADB command for it - there is no automatic CSC changer in this app.
 - App list: tick *User apps* / *System apps* to show them separately (Type column). *Uninstall ticked apps* removes the ticked apps from the phone (with confirmation; a few critical packages are protected).
 - Backup folders are named `PhoneBackup_<PhoneModel>_<date>_<time>`; *Open backup folder* opens it in Explorer.
 - SMS restore sets the helper as the default SMS app through ADB automatically and puts your previous SMS app back at the end.
