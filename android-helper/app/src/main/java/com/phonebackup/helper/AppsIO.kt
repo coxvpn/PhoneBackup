@@ -9,7 +9,7 @@ import java.io.Writer
 
 object AppsIO {
 
-    /** اول {"ok":true,"count":N} و بعد N خط: p=پکیج n=نام برنامه v=نسخه s=حجم f=مسیر فایل‌های APK */
+    /** اول {"ok":true,"count":N} و بعد N خط: p=پکیج n=نام برنامه v=نسخه s=حجم k=نوع f=مسیر فایل‌های APK */
     fun stream(ctx: Context, w: Writer) {
         val pm = ctx.packageManager
         val items = ArrayList<JSONObject>()
@@ -18,7 +18,8 @@ object AppsIO {
             if (pi.packageName == ctx.packageName) continue
             val sys = (ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0
             val upd = (ai.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-            if (sys && !upd) continue
+            // k: 0 = برنامه‌ی کاربر، 1 = سیستمی، 2 = سیستمی به‌روزشده
+            val kind = if (!sys) 0 else if (upd) 2 else 1
 
             val paths = ArrayList<String>()
             if (ai.sourceDir != null) paths.add(ai.sourceDir)
@@ -36,6 +37,7 @@ object AppsIO {
                     .put("n", label)
                     .put("v", pi.versionName ?: "")
                     .put("s", size)
+                    .put("k", kind)
                     .put("f", JSONArray(paths))
             )
         }

@@ -20,6 +20,7 @@ public class HelperClient : IDisposable
     StreamReader? reader;
     StreamWriter? writer;
     public bool DefaultSms { get; private set; }
+    public string DefaultPkg { get; private set; } = "";
 
     public HelperClient(string token, CancellationToken ct)
     {
@@ -57,6 +58,7 @@ public class HelperClient : IDisposable
     {
         var r = await Request(new JsonObject { ["cmd"] = "ping" });
         DefaultSms = r["defaultSms"]?.GetValue<bool>() ?? false;
+        DefaultPkg = r["defaultPkg"]?.GetValue<string>() ?? "";
         return true;
     }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -9,6 +10,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -22,6 +24,13 @@ namespace PhoneBackup;
 public partial class MainWindow : Window
 {
     const string Pkg = "com.phonebackup.helper";
+    const string SmsRole = "android.app.role.SMS";
+    static readonly HashSet<string> Protected = new()
+    {
+        "android", "com.android.systemui", "com.android.phone", "com.android.settings", "com.android.shell",
+        "com.android.providers.telephony", "com.android.providers.contacts", "com.android.providers.media",
+        "com.android.providers.settings", "com.google.android.gms"
+    };
     static readonly string[] DefaultFolders = { "DCIM", "Pictures", "Movies", "Music" };
     static readonly JsonSerializerOptions FileOpts = new()
     {
@@ -39,6 +48,8 @@ public partial class MainWindow : Window
     string? serial;
     string? deviceDesc;
     string? deviceErr;
+    string? deviceModel;
+    string? lastBackupRoot;
     int devState = -1; // -1 searching, 0 none, 1 unauthorized, 2 connected, 3 adb error
     bool busy;
     bool ready;
@@ -55,9 +66,11 @@ public partial class MainWindow : Window
         appsView = CollectionViewSource.GetDefaultView(apps);
         appsView.Filter = o =>
         {
+            var a = (AppItem)o;
+            bool isSystem = a.Kind == 1;
+            if (isSystem ? ShowSystemChk.IsChecked != true : ShowUserChk.IsChecked != true) return false;
             var t = SearchBox.Text.Trim();
             if (t.Length == 0) return true;
-            var a = (AppItem)o;
             return a.Name.Contains(t, StringComparison.OrdinalIgnoreCase) ||
                    a.Package.Contains(t, StringComparison.OrdinalIgnoreCase);
         };
@@ -84,10 +97,11 @@ public partial class MainWindow : Window
     void ApplyLanguage()
     {
         FlowDirection = Loc.Persian ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
-        Title = T("title");
+        Title = T("title") + " v" + Updater.Current.ToString(3);
         LangLabel.Text = T("language");
         UpdateBtn.Content = T("btn_update");
         AboutBtn.Content = T("btn_about");
+        InfoBtn.Content = T("btn_info");
         GrpWhat.Header = T("grp_what");
         ChkApps.Content = T("chk_apps");
         ChkMedia.Content = T("chk_media");
@@ -100,12 +114,18 @@ public partial class MainWindow : Window
         SelAllBtn.Content = T("btn_sel_all");
         SelNoneBtn.Content = T("btn_sel_none");
         SearchLabel.Text = T("search");
-        if (AppList.View is GridView gv && gv.Columns.Count >= 4)
+        ShowUserChk.Content = T("show_user");
+        ShowSystemChk.Content = T("show_system");
+        UninstallBtn.Content = T("btn_uninstall");
+        OpenFolderBtn.Content = T("btn_open_folder");
+        if (AppList.View is GridView gv && gv.Columns.Count >= 5)
         {
             gv.Columns[1].Header = T("col_name");
             gv.Columns[2].Header = T("col_pkg");
-            gv.Columns[3].Header = T("col_size");
+            gv.Columns[3].Header = T("col_type");
+            gv.Columns[4].Header = T("col_size");
         }
+        appsView?.Refresh();
         FolderLabel.Text = T("folder");
         BrowseBtn.Content = T("browse");
         BackupBtn.Content = T("btn_backup");
@@ -159,8 +179,13 @@ public partial class MainWindow : Window
                 DeviceText.Text = T("device_searching");
                 break;
         }
-        if (!busy)
-            BackupBtn.IsEnabled = RestoreBtn.IsEnabled = LoadAppsBtn.IsEnabled = RefreshFoldersBtn.IsEnabled = devState == 2;
+        if (!busy) SetButtons(devState == 2);
+    }
+
+    void SetButtons(bool enabled)
+    {
+        BackupBtn.IsEnabled = RestoreBtn.IsEnabled = LoadAppsBtn.IsEnabled =
+            RefreshFoldersBtn.IsEnabled = UninstallBtn.IsEnabled = InfoBtn.IsEnabled = enabled;
     }
 
     void SetProgress(int value, int max, string text)
@@ -175,6 +200,12 @@ public partial class MainWindow : Window
     {
         var dlg = new Microsoft.Win32.OpenFolderDialog();
         if (dlg.ShowDialog() == true) FolderBox.Text = dlg.FolderName;
+    }
+
+    void Info_Click(object sender, RoutedEventArgs e)
+    {
+        if (serial == null || busy) return;
+        new DeviceInfoWindow(adb, serial) { Owner = this }.ShowDialog();
     }
 
     void About_Click(object sender, RoutedEventArgs e) => new AboutWindow { Owner = this }.ShowDialog();
@@ -225,6 +256,7 @@ public partial class MainWindow : Window
                     Name = n["n"]?.GetValue<string>() ?? "",
                     Version = n["v"]?.GetValue<string>() ?? "",
                     Size = n["s"]?.GetValue<long>() ?? 0,
+                    Kind = n["k"]?.GetValue<int>() ?? 0,
                     Paths = n["f"]!.AsArray().Select(x => x!.GetValue<string>()).ToList()
                 };
                 item.PropertyChanged += (_, _) => UpdateAppCount();
@@ -309,6 +341,7 @@ public partial class MainWindow : Window
             {
                 serial = ok;
                 var model = (await adb.RunOn(ok, "shell", "getprop", "ro.product.model")).Output.Trim();
+                deviceModel = model;
                 var ver = (await adb.RunOn(ok, "shell", "getprop", "ro.build.version.release")).Output.Trim();
                 deviceDesc = $"{model} (Android {ver})";
                 Log(T("device_found", deviceDesc));
@@ -333,7 +366,7 @@ public partial class MainWindow : Window
         cts = new CancellationTokenSource();
         ct = cts.Token;
         adb.Token = ct;
-        BackupBtn.IsEnabled = RestoreBtn.IsEnabled = LoadAppsBtn.IsEnabled = RefreshFoldersBtn.IsEnabled = false;
+        SetButtons(false);
         CancelBtn.IsEnabled = true;
         Progress.IsIndeterminate = true;
 
@@ -400,7 +433,7 @@ public partial class MainWindow : Window
 
             var file = await Updater.DownloadAsync(info, p => SetProgress(p, 100, T("update_downloading", p)));
             Log(T("update_restart"));
-            Updater.ApplyAndRestart(file);
+            Updater.ApplyAndRestart(file, info.AssetName);
             Application.Current.Shutdown();
         }
         catch (Exception ex)
@@ -468,8 +501,10 @@ public partial class MainWindow : Window
 
         var baseDir = FolderBox.Text.Trim();
         if (!Directory.Exists(baseDir)) { Log(T("folder_invalid")); return; }
-        var root = Path.Combine(baseDir, "PhoneBackup_" + DateTime.Now.ToString("yyyyMMdd_HHmm"));
+        var modelPart = SafeName(deviceModel ?? "Phone", "Phone").Replace(' ', '-');
+        var root = Path.Combine(baseDir, $"PhoneBackup_{modelPart}_{DateTime.Now:yyyyMMdd_HHmm}");
         Directory.CreateDirectory(root);
+        lastBackupRoot = root;
         Log(T("backup_folder", root));
 
         if (contacts || sms)
@@ -628,7 +663,7 @@ public partial class MainWindow : Window
             File.Exists(Path.Combine(f, "contacts.json")) || File.Exists(Path.Combine(f, "sms.json"));
         if (IsBackup(folder)) return folder;
         return Directory.GetDirectories(folder, "PhoneBackup_*")
-            .OrderByDescending(d => Path.GetFileName(d)).FirstOrDefault(IsBackup);
+            .OrderByDescending(d => Directory.GetLastWriteTime(d)).FirstOrDefault(IsBackup);
     }
 
     static List<string> BackupMediaFolders(string mediaDir)
@@ -704,32 +739,14 @@ public partial class MainWindow : Window
 
         if (hasC || hasS)
         {
-            using var h = await ConnectHelper(hasS);
+            using var h = await ConnectHelper(false);
             if (h == null) Log(T("skip_contacts_sms"));
             else
             {
                 try
                 {
                     if (hasC) await RestoreList(h, Path.Combine(root, "contacts.json"), "put_contacts", 200, T("contacts"));
-                    if (hasS)
-                    {
-                        Log(T("sms_wait_default"));
-                        bool ok = false;
-                        for (int i = 0; i < 60 && !ok; i++)
-                        {
-                            ct.ThrowIfCancellationRequested();
-                            await h.PingAsync();
-                            ok = h.DefaultSms;
-                            if (!ok) await Task.Delay(2000, ct);
-                        }
-                        if (!ok) Log(T("sms_not_confirmed"));
-                        else
-                        {
-                            await RestoreList(h, Path.Combine(root, "sms.json"), "put_sms", 500, T("sms"));
-                            Log(T("sms_revert"));
-                            await adb.RunOn(serial!, "shell", "am", "start", "-a", "android.settings.MANAGE_DEFAULT_APPS_SETTINGS");
-                        }
-                    }
+                    if (hasS) await RestoreSms(h, Path.Combine(root, "sms.json"));
                 }
                 finally { await h.StopAsync(); }
             }
@@ -838,5 +855,138 @@ public partial class MainWindow : Window
         await adb.RunOn(serial!, "shell", "content", "call", "--uri", "content://media/",
             "--method", "scan_volume", "--arg", "external_primary");
         Log(T("media_rescan_hint"));
+    }
+
+    // ---------------- SMS restore (default SMS app handling) ----------------
+
+    async Task<string> GetDefaultSmsPackage()
+    {
+        var r = await adb.RunOn(serial!, "shell", "cmd", "role", "get-role-holders", "--user", "0", SmsRole);
+        foreach (var raw in r.Output.Split('\n'))
+        {
+            var l = raw.Trim();
+            if (Regex.IsMatch(l, @"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$")) return l;
+        }
+        var r2 = await adb.RunOn(serial!, "shell", "settings", "get", "secure", "sms_default_application");
+        var t = r2.Output.Trim();
+        return Regex.IsMatch(t, @"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$") ? t : "";
+    }
+
+    /// برنامه‌ی کمکی را (با دستور adb، بدون نیاز به تأیید روی گوشی) پیامک پیش‌فرض می‌کند،
+    /// پیامک‌ها را برمی‌گرداند و در پایان برنامه‌ی پیامک قبلی را دوباره پیش‌فرض می‌کند.
+    async Task RestoreSms(HelperClient h, string file)
+    {
+        var prev = await GetDefaultSmsPackage();
+        if (prev.Length > 0) Log(T("sms_previous", prev));
+        try
+        {
+            Log(T("sms_role_cmd"));
+            var rr = await adb.RunOn(serial!, "shell", "cmd", "role", "add-role-holder", "--user", "0", SmsRole, Pkg);
+            await h.PingAsync();
+            bool ok = h.DefaultSms;
+
+            if (!ok)
+            {
+                var msg = rr.Output.Trim();
+                if (msg.Length > 0) Log("   " + msg.Replace("\r", "").Replace("\n", " "));
+                // روش دوم: پنجره‌ی تأیید روی خود گوشی
+                Log(T("sms_wait_default"));
+                await adb.RunOn(serial!, "shell", "am", "start", "-n", Pkg + "/.MainActivity", "--ez", "request_sms_role", "true");
+                for (int i = 0; i < 60 && !ok; i++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    await Task.Delay(2000, ct);
+                    await h.PingAsync();
+                    ok = h.DefaultSms;
+                }
+            }
+            if (!ok)
+            {
+                Log(T("sms_default_diag", h.DefaultPkg.Length > 0 ? h.DefaultPkg : "?"));
+                Log(T("sms_not_confirmed"));
+                return;
+            }
+            await RestoreList(h, file, "put_sms", 500, T("sms"));
+        }
+        finally
+        {
+            var old = adb.Token;
+            adb.Token = default;
+            try { await RevertSms(prev); } catch { }
+            finally { adb.Token = old; }
+        }
+    }
+
+    async Task RevertSms(string prev)
+    {
+        var cur = await GetDefaultSmsPackage();
+        if (cur.Length > 0 && cur != Pkg) return; // نیازی به برگرداندن نیست
+        if (prev.Length > 0 && prev != Pkg)
+        {
+            await adb.RunOn(serial!, "shell", "cmd", "role", "add-role-holder", "--user", "0", SmsRole, prev);
+            if (await GetDefaultSmsPackage() == prev)
+            {
+                Log(T("sms_reverted", prev));
+                return;
+            }
+        }
+        Log(T("sms_revert"));
+        await adb.RunOn(serial!, "shell", "am", "start", "-a", "android.settings.MANAGE_DEFAULT_APPS_SETTINGS");
+    }
+
+    // ---------------- uninstall / filter / open folder ----------------
+
+    void Filter_Changed(object sender, RoutedEventArgs e) => appsView?.Refresh();
+
+    async void Uninstall_Click(object sender, RoutedEventArgs e) => await RunSafe(UninstallSelected);
+
+    async Task UninstallSelected()
+    {
+        var sel = apps.Where(a => a.IsSelected).ToList();
+        if (sel.Count == 0) { Log(T("uninstall_none")); return; }
+
+        int sysCount = sel.Count(a => a.Kind == 1);
+        var names = string.Join("\n", sel.Take(15).Select(a => "• " + a.Name));
+        if (sel.Count > 15) names += $"\n... (+{sel.Count - 15})";
+        var msg = T("uninstall_confirm", sel.Count, names);
+        if (sysCount > 0) msg += T("uninstall_confirm_system", sysCount);
+
+        var ask = MessageBox.Show(msg, T("uninstall_title"), MessageBoxButton.YesNo,
+            sysCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Question, MessageBoxResult.No,
+            Loc.Persian ? MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign : MessageBoxOptions.None);
+        if (ask != MessageBoxResult.Yes) return;
+
+        Log(T("uninstalling", sel.Count));
+        int done = 0, bad = 0, i = 0;
+        foreach (var app in sel)
+        {
+            ct.ThrowIfCancellationRequested();
+            i++;
+            SetProgress(i, sel.Count, T("apps_progress", i, sel.Count, app.Name));
+            if (Protected.Contains(app.Package)) { bad++; Log(T("uninstall_protected", app.Package)); continue; }
+            var r = await adb.RunOn(serial!, "shell", "pm", "uninstall", "--user", "0", app.Package);
+            if (r.Output.Contains("Success"))
+            {
+                done++;
+                Log(T("uninstall_ok", app.Name));
+                apps.Remove(app);
+            }
+            else
+            {
+                bad++;
+                Log(T("uninstall_fail", app.Name, r.Output.Trim().Replace("\r", "").Replace("\n", " ")));
+            }
+        }
+        UpdateAppCount();
+        Log(T("uninstall_done", done, bad));
+    }
+
+    void OpenFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var path = lastBackupRoot != null && Directory.Exists(lastBackupRoot) ? lastBackupRoot : FolderBox.Text.Trim();
+        if (!Directory.Exists(path)) { Log(T("open_folder_missing", path)); return; }
+        var psi = new ProcessStartInfo("explorer.exe") { UseShellExecute = false };
+        psi.ArgumentList.Add(path);
+        Process.Start(psi);
     }
 }

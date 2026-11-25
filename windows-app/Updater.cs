@@ -12,7 +12,7 @@ namespace PhoneBackup;
 
 public static class Updater
 {
-    public record Info(Version Version, string Url, string Notes);
+    public record Info(Version Version, string Url, string Notes, string AssetName);
 
     public static string Repo =>
         Assembly.GetExecutingAssembly().GetCustomAttributes<AssemblyMetadataAttribute>()
@@ -40,17 +40,19 @@ public static class Updater
         if (!Version.TryParse(tag, out var ver)) throw new Exception("Bad release tag: " + tag);
 
         string? url = null;
+        string assetName = "PhoneBackup.exe";
         foreach (var a in node["assets"]!.AsArray())
         {
             var name = a!["name"]?.GetValue<string>() ?? "";
             if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             {
                 url = a["browser_download_url"]?.GetValue<string>();
+                assetName = name;
                 break;
             }
         }
         if (url == null) throw new Exception("No .exe in the latest release");
-        return new Info(Normalize(ver), url, node["body"]?.GetValue<string>() ?? "");
+        return new Info(Normalize(ver), url, node["body"]?.GetValue<string>() ?? "", assetName);
     }
 
     public static async Task<string> DownloadAsync(Info info, Action<int> progress)
@@ -80,24 +82,45 @@ public static class Updater
         return dest;
     }
 
-    /// فایل جدید را بعد از بسته‌شدن برنامه جایگزین و برنامه را دوباره اجرا می‌کند.
-    public static void ApplyAndRestart(string newExe)
+    /// فایل جدید را بعد از بسته‌شدن برنامه با نام نسخه‌دار خودش (مثلاً PhoneBackup_v1.5.3.exe)
+    /// کنار فایل فعلی می‌گذارد، فایل قدیمی را پاک می‌کند و برنامه را دوباره اجرا می‌کند.
+    public static void ApplyAndRestart(string newExe, string assetName)
     {
         var cur = Environment.ProcessPath ?? throw new Exception("Unknown process path");
+        var name = Path.GetFileName(assetName);
+        if (string.IsNullOrWhiteSpace(name) || !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            name = Path.GetFileName(cur);
+        var target = Path.Combine(Path.GetDirectoryName(cur)!, name);
+
         var script = Path.Combine(Path.GetTempPath(), "phonebackup_update.cmd");
         var sb = new StringBuilder();
         sb.AppendLine("@echo off");
         sb.AppendLine("chcp 65001 >nul");
+        sb.AppendLine($"set \"NEW={newExe}\"");
+        sb.AppendLine($"set \"TARGET={target}\"");
+        sb.AppendLine($"set \"CUR={cur}\"");
         sb.AppendLine("set /a n=0");
         sb.AppendLine(":retry");
         sb.AppendLine("set /a n+=1");
         sb.AppendLine("timeout /t 1 /nobreak >nul");
-        sb.AppendLine($"move /y \"{newExe}\" \"{cur}\" >nul 2>&1");
-        sb.AppendLine("if errorlevel 1 (");
-        sb.AppendLine("  if %n% lss 30 goto retry");
-        sb.AppendLine("  exit /b 1");
-        sb.AppendLine(")");
-        sb.AppendLine($"start \"\" \"{cur}\"");
+        sb.AppendLine("move /y \"%NEW%\" \"%TARGET%\" >nul 2>&1");
+        sb.AppendLine("if not errorlevel 1 goto moved");
+        sb.AppendLine("if %n% lss 30 goto retry");
+        sb.AppendLine("exit /b 1");
+        sb.AppendLine(":moved");
+        sb.AppendLine("if /i \"%TARGET%\"==\"%CUR%\" goto run");
+        sb.AppendLine("set /a d=0");
+        sb.AppendLine(":del");
+        sb.AppendLine("del /f /q \"%CUR%\" >nul 2>&1");
+        sb.AppendLine("if not exist \"%CUR%\" goto run");
+        sb.AppendLine("set /a d+=1");
+        sb.AppendLine("if %d% lss 30 goto delwait");
+        sb.AppendLine("goto run");
+        sb.AppendLine(":delwait");
+        sb.AppendLine("timeout /t 1 /nobreak >nul");
+        sb.AppendLine("goto del");
+        sb.AppendLine(":run");
+        sb.AppendLine("start \"\" \"%TARGET%\"");
         sb.AppendLine("(goto) 2>nul & del \"%~f0\"");
         File.WriteAllText(script, sb.ToString(), new UTF8Encoding(false));
 

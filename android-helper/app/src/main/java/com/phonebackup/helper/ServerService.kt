@@ -106,7 +106,8 @@ class ServerService : Service() {
                         "ping" -> send(w, JSONObject()
                             .put("ok", true)
                             .put("sdk", Build.VERSION.SDK_INT)
-                            .put("defaultSms", Telephony.Sms.getDefaultSmsPackage(this) == packageName))
+                            .put("defaultSms", Telephony.Sms.getDefaultSmsPackage(this) == packageName)
+                            .put("defaultPkg", Telephony.Sms.getDefaultSmsPackage(this) ?: ""))
                         "get_contacts" -> {
                             val a = ContactsIO.read(this)
                             send(w, JSONObject().put("ok", true).put("count", a.length()))

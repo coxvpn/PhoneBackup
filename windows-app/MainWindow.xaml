@@ -36,6 +36,7 @@
                     <ComboBoxItem Content="فارسی" />
                 </ComboBox>
                 <Button x:Name="UpdateBtn" Padding="10,4" Margin="4,0" Click="Update_Click" />
+                <Button x:Name="InfoBtn" Padding="10,4" Margin="4,0" IsEnabled="False" Click="Info_Click" />
                 <Button x:Name="AboutBtn" Padding="10,4" Margin="4,0" Click="About_Click" />
             </StackPanel>
         </Grid>
@@ -84,6 +85,12 @@
                     <Button x:Name="LoadAppsBtn" Padding="12,4" Margin="0,0,8,4" IsEnabled="False" Click="LoadApps_Click" />
                     <Button x:Name="SelAllBtn" Padding="12,4" Margin="0,0,8,4" Click="SelAll_Click" />
                     <Button x:Name="SelNoneBtn" Padding="12,4" Margin="0,0,8,4" Click="SelNone_Click" />
+                    <CheckBox x:Name="ShowUserChk" IsChecked="True" VerticalAlignment="Center" Margin="8,0,8,4"
+                              Checked="Filter_Changed" Unchecked="Filter_Changed" />
+                    <CheckBox x:Name="ShowSystemChk" IsChecked="False" VerticalAlignment="Center" Margin="0,0,8,4"
+                              Checked="Filter_Changed" Unchecked="Filter_Changed" />
+                    <Button x:Name="UninstallBtn" Padding="12,4" Margin="0,0,8,4" Foreground="#B00020" IsEnabled="False"
+                            Click="Uninstall_Click" />
                     <TextBlock x:Name="SearchLabel" VerticalAlignment="Center" Margin="8,0,6,4" />
                     <TextBox x:Name="SearchBox" Width="170" Padding="3" Margin="0,0,8,4" TextChanged="Search_Changed" />
                     <TextBlock x:Name="AppCountText" VerticalAlignment="Center" Margin="8,0,0,4" Foreground="#555" />
@@ -98,9 +105,10 @@
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
-                            <GridViewColumn Width="280" DisplayMemberBinding="{Binding Name}" />
-                            <GridViewColumn Width="270" DisplayMemberBinding="{Binding Package}" />
-                            <GridViewColumn Width="90" DisplayMemberBinding="{Binding SizeText}" />
+                            <GridViewColumn Width="240" DisplayMemberBinding="{Binding Name}" />
+                            <GridViewColumn Width="240" DisplayMemberBinding="{Binding Package}" />
+                            <GridViewColumn Width="120" DisplayMemberBinding="{Binding TypeText}" />
+                            <GridViewColumn Width="80" DisplayMemberBinding="{Binding SizeText}" />
                         </GridView>
                     </ListView.View>
                 </ListView>
@@ -122,6 +130,7 @@
             <Button x:Name="BackupBtn" Padding="20,8" IsEnabled="False" Click="Backup_Click" />
             <Button x:Name="RestoreBtn" Padding="20,8" Margin="12,0" IsEnabled="False" Click="Restore_Click" />
             <Button x:Name="CancelBtn" Padding="20,8" IsEnabled="False" Click="Cancel_Click" />
+            <Button x:Name="OpenFolderBtn" Padding="20,8" Margin="12,0" Click="OpenFolder_Click" />
         </StackPanel>
 
         <StackPanel Grid.Row="6" Margin="0,0,0,8">

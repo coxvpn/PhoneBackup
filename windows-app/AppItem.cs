@@ -22,6 +22,16 @@ public class AppItem : INotifyPropertyChanged
     public string Package { get; set; } = "";
     public string Version { get; set; } = "";
     public long Size { get; set; }
+
+    /// 0 = برنامه‌ی کاربر، 1 = سیستمی، 2 = سیستمی به‌روزشده
+    public int Kind { get; set; }
+
+    public string TypeText => Kind switch
+    {
+        1 => Loc.T("type_system"),
+        2 => Loc.T("type_updated"),
+        _ => Loc.T("type_user")
+    };
     public List<string> Paths { get; set; } = new();
 
     public string SizeText => Size >= 1024 * 1024
