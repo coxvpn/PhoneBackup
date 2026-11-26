@@ -8,6 +8,7 @@ Created by Mostafa Mandegari (مصطفی ماندگاری).
 2. Settings → Actions → General → Workflow permissions → **Read and write permissions** → Save.
 3. Every push builds automatically and publishes a new **Release** (right side of the repo page) containing `PhoneBackup.exe`.
    You can also run it manually from the Actions tab → Run workflow.
+<img width="1147" height="839" alt="image" src="https://github.com/user-attachments/assets/e8d66c63-3766-4327-960e-91a5fab8a4ca" />
 
 ## Versioning
 The file `VERSION` holds the major.minor number (e.g. `1.4`). Every build appends the Actions run number, so the Release is `v1.4.<run>` and the file is named `PhoneBackup_v1.4.<run>.exe`. Edit `VERSION` to start a new minor/major version.
