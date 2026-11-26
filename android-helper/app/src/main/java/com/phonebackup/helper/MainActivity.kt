@@ -64,6 +64,12 @@ class MainActivity : Activity() {
         }
         layout.addView(backupSmsBtn, margin(0, 12, 0, 0))
 
+        val backupAppsBtn = Button(this).apply {
+            text = "بکاپ برنامه‌ها (انتخابی)"
+            setOnClickListener { startActivity(Intent(this@MainActivity, AppsActivity::class.java)) }
+        }
+        layout.addView(backupAppsBtn, margin(0, 12, 0, 0))
+
         val sectionTitle = TextView(this).apply {
             text = "\nبازیابی دستی از روی فایل بکاپ\n(اگر برنامه‌ی ویندوز فایل را روی گوشی کپی کرده، معمولاً در\nDownload/PhoneBackup_Restore)"
             textSize = 15f
@@ -95,6 +101,12 @@ class MainActivity : Activity() {
 
         resultText = TextView(this).apply { textSize = 15f }
         layout.addView(resultText, margin(0, 24, 0, 0))
+
+        val aboutBtn = Button(this).apply {
+            text = "درباره"
+            setOnClickListener { startActivity(Intent(this@MainActivity, AboutActivity::class.java)) }
+        }
+        layout.addView(aboutBtn, margin(0, 32, 0, 0))
 
         setContentView(ScrollView(this).apply { addView(layout) })
         handle(intent)
