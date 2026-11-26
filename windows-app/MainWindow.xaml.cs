@@ -25,6 +25,7 @@ public partial class MainWindow : Window
 {
     const string Pkg = "com.phonebackup.helper";
     const string SmsRole = "android.app.role.SMS";
+    const string ManualRestoreDir = "/sdcard/Download/PhoneBackup_Restore";
     static readonly HashSet<string> Protected = new()
     {
         "android", "com.android.systemui", "com.android.phone", "com.android.settings", "com.android.shell",
@@ -756,7 +757,13 @@ public partial class MainWindow : Window
         if (hasC || hasS)
         {
             using var h = await ConnectHelper(false);
-            if (h == null) Log(T("skip_contacts_sms"));
+            if (h == null)
+            {
+                Log(T("skip_contacts_sms"));
+                await PushForManualRestore(
+                    hasC ? Path.Combine(root, "contacts.json") : null,
+                    hasS ? Path.Combine(root, "sms.json") : null);
+            }
             else
             {
                 try
@@ -920,6 +927,7 @@ public partial class MainWindow : Window
             {
                 Log(T("sms_default_diag", h.DefaultPkg.Length > 0 ? h.DefaultPkg : "?"));
                 Log(T("sms_not_confirmed"));
+                await PushForManualRestore(null, file);
                 return;
             }
             await RestoreList(h, file, "put_sms", 500, T("sms"));
@@ -931,6 +939,19 @@ public partial class MainWindow : Window
             try { await RevertSms(prev); } catch { }
             finally { adb.Token = old; }
         }
+    }
+
+    /// فایل‌های بکاپ را روی خود گوشی می‌گذارد تا در صورت نیاز از داخل خودِ برنامه‌ی کمکی
+    /// (با دکمه‌های «بازیابی مخاطبین از فایل» / «بازیابی پیامک از فایل») به‌صورت دستی بازیابی شوند.
+    async Task PushForManualRestore(string? contactsFile, string? smsFile)
+    {
+        if (contactsFile == null && smsFile == null) return;
+        await adb.RunOn(serial!, "shell", "mkdir", "-p", ManualRestoreDir);
+        if (contactsFile != null && File.Exists(contactsFile))
+            await adb.RunOn(serial!, "push", contactsFile, ManualRestoreDir + "/contacts.json");
+        if (smsFile != null && File.Exists(smsFile))
+            await adb.RunOn(serial!, "push", smsFile, ManualRestoreDir + "/sms.json");
+        Log(T("manual_restore_hint", ManualRestoreDir));
     }
 
     async Task RevertSms(string prev)

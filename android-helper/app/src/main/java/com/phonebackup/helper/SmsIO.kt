@@ -71,4 +71,26 @@ object SmsIO {
         }
         return JSONObject().put("added", added).put("skipped", skipped)
     }
+
+    /** همه‌ی پیامک‌ها را یکجا به‌صورت JSONArray برمی‌گرداند (همان قالبی که stream() خط‌به‌خط می‌دهد)؛
+     *  برای بکاپ‌گیری مستقیم از خود گوشی، بدون نیاز به کامپیوتر. */
+    fun readAll(ctx: Context): JSONArray {
+        val proj = arrayOf("address", "body", "date", "date_sent", "type", "read")
+        val out = JSONArray()
+        val c = ctx.contentResolver.query(Telephony.Sms.CONTENT_URI, proj, null, null, "date ASC") ?: return out
+        c.use {
+            while (it.moveToNext()) {
+                out.put(
+                    JSONObject()
+                        .put("a", it.getString(0) ?: "")
+                        .put("b", it.getString(1) ?: "")
+                        .put("d", it.getLong(2))
+                        .put("ds", it.getLong(3))
+                        .put("t", it.getInt(4))
+                        .put("r", it.getInt(5))
+                )
+            }
+        }
+        return out
+    }
 }

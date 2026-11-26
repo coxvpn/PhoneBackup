@@ -280,6 +280,16 @@ public static class Loc
         ["factory_reset_maybe_blocked"] = ("The phone may have blocked this command on newer Android versions. Use Settings > General management > Reset > Factory data reset instead.", "ممکن است گوشی این دستور را در نسخه‌های جدید اندروید مسدود کرده باشد. از مسیر تنظیمات > مدیریت کلی > بازنشانی > بازنشانی اطلاعات کارخانه استفاده کن."),
         ["csc_guide_text"] = ("Current CSC: {0}\n\nOn modern Samsung phones there is no ADB command that changes CSC. A real CSC change needs re-flashing the phone with Odin using a CSC file for the target region (HOME_CSC keeps your data, CSC erases it).\n\nSteps:\n1. Download the firmware for the target CSC from the page that will now open (or samfw.com / Frija).\n2. Install Odin on the PC and Samsung USB drivers.\n3. Boot the phone into Download mode (button above), connect the cable.\n4. In Odin, load BL/AP/CP in their slots and the CSC file in the CSC slot (not HOME_CSC) and press Start.\n\nThis is a firmware flash, not something this app performs automatically; a wrong file can make the phone unusable, so only do this if you are comfortable with Odin.", "CSC فعلی: {0}\n\nروی گوشی‌های جدید سامسونگ هیچ دستور ADB‌ای وجود ندارد که CSC را واقعاً عوض کند. تغییر واقعی CSC نیاز به فلش‌کردن گوشی با Odin و فایل CSC مربوط به منطقه‌ی هدف دارد (HOME_CSC اطلاعات را نگه می‌دارد، CSC پاکشان می‌کند).\n\nمراحل:\n۱. فریمور مربوط به CSC موردنظر را از صفحه‌ای که الان باز می‌شود (یا samfw.com یا Frija) دانلود کن.\n۲. Odin و درایور USB سامسونگ را روی کامپیوتر نصب کن.\n۳. گوشی را با دکمه‌ی بالا وارد Download mode کن و کابل را وصل کن.\n۴. در Odin فایل‌های BL/AP/CP را در جایگاه خودشان و فایل CSC (نه HOME_CSC) را در جایگاه CSC بگذار و Start را بزن.\n\nاین کار فلش‌کردن فریمور است و این برنامه آن را خودکار انجام نمی‌دهد؛ فایل اشتباه می‌تواند گوشی را از کار بیندازد، پس فقط اگر با Odin راحتی این کار را انجام بده."),
 
+        ["manual_restore_hint"] = ("The backup file(s) were also copied to the phone at {0}. On the phone, open the \"Phone Backup Helper\" app and use \"Restore contacts from file\" / \"Restore SMS from file\" to finish manually, then pick that file.", "فایل‌ها هم روی خود گوشی کپی شدند در: {0}\nروی گوشی برنامه‌ی «پشتیبان گوشی» را باز کن و از «بازیابی مخاطبین از فایل» / «بازیابی پیامک از فایل» استفاده کن و همان فایل را انتخاب کن."),
+
+        // ---- Odin launcher ----
+        ["grp_odin"] = ("Flash firmware (launch your own Odin)", "فلش فریمور (اجرای Odin خودت)"),
+        ["odin_path_label"] = ("Odin.exe:", "مسیر Odin.exe:"),
+        ["odin_launch"] = ("Launch Odin", "اجرای Odin"),
+        ["odin_not_set"] = ("Browse to your own Odin.exe first (this app does not include or download Odin).", "اول مسیر Odin.exe خودت را انتخاب کن (این برنامه خودِ Odin را همراه ندارد و دانلودش نمی‌کند)."),
+        ["odin_launch_failed"] = ("Could not launch Odin: {0}", "اجرای Odin ناموفق بود: {0}"),
+        ["odin_source_link"] = ("Don't have Odin? Search for a copy (opens your browser)", "Odin نداری؟ جست‌وجوی یک نسخه (مرورگرت باز می‌شود)"),
+
         // ---- about ----
         ["about_title"] = ("About", "درباره برنامه"),
         ["about_desc"] = ("Back up and restore APK files, contacts, SMS, photos, videos and music of an Android phone from Windows.", "پشتیبان‌گیری و بازیابی فایل نصبی برنامه‌ها، مخاطبین، پیامک‌ها، عکس، فیلم و موزیک گوشی اندروید از ویندوز."),

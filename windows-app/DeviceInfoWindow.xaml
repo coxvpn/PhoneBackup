@@ -10,6 +10,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock x:Name="StatusText" Margin="0,0,0,8" Foreground="#555" TextWrapping="Wrap" />
@@ -47,7 +48,29 @@
             </WrapPanel>
         </GroupBox>
 
-        <WrapPanel Grid.Row="3" Margin="0,10,0,0">
+        <GroupBox x:Name="GrpOdin" Grid.Row="3" Padding="8" Margin="0,10,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="OdinPathLabel" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox x:Name="OdinPathBox" Grid.Column="1" Padding="4" IsReadOnly="True" FlowDirection="LeftToRight" />
+                <Button x:Name="OdinBrowseBtn" Grid.Column="2" Padding="10,4" Margin="8,0,0,0" Click="OdinBrowse_Click" />
+                <Button x:Name="OdinLaunchBtn" Grid.Column="3" Padding="10,4" Margin="8,0,0,0" Click="OdinLaunch_Click" />
+                <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Margin="0,6,0,0">
+                    <Hyperlink x:Name="OdinSourceLink" Click="OdinSource_Click"><Run x:Name="OdinSourceRun" /></Hyperlink>
+                </TextBlock>
+            </Grid>
+        </GroupBox>
+
+        <WrapPanel Grid.Row="4" Margin="0,10,0,0">
             <Button x:Name="RefreshBtn" Padding="12,5" Margin="0,0,8,4" Click="Refresh_Click" />
             <Button x:Name="CopyBtn" Padding="12,5" Margin="0,0,8,4" Click="Copy_Click" />
             <Button x:Name="SaveBtn" Padding="12,5" Margin="0,0,8,4" Click="Save_Click" />

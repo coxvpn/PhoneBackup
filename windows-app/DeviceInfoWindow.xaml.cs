@@ -40,6 +40,12 @@ public partial class DeviceInfoWindow : Window
         ImeiBtn.Content = T("btn_info_imei");
         FirmwareBtn.Content = T("btn_info_firmware");
         GrpActions.Header = T("grp_device_actions");
+        GrpOdin.Header = T("grp_odin");
+        OdinPathLabel.Text = T("odin_path_label");
+        OdinBrowseBtn.Content = T("browse");
+        OdinLaunchBtn.Content = T("odin_launch");
+        OdinPathBox.Text = LoadOdinPath();
+        OdinSourceRun.Text = T("odin_source_link");
         RecoveryBtn.Content = T("btn_recovery");
         DownloadModeBtn.Content = T("btn_download_mode");
         FactoryResetBtn.Content = T("btn_factory_reset");
@@ -56,6 +62,7 @@ public partial class DeviceInfoWindow : Window
         InfoList.ItemsSource = rows;
 
         Loaded += async (_, _) => await Load();
+        Loaded += async (_, _) => await AutoDetectOdin();
     }
 
     void SetBusy(bool v)
@@ -229,6 +236,101 @@ public partial class DeviceInfoWindow : Window
             Loc.Persian ? MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign : MessageBoxOptions.None);
         if (firmwareUrl.Length > 0)
             try { Process.Start(new ProcessStartInfo(firmwareUrl) { UseShellExecute = true }); } catch { }
+    }
+
+    // ---------------- Odin launcher (we only launch the user's own Odin.exe; we never flash anything ourselves) ----------------
+
+    static string OdinSettingsFile => System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PhoneBackup", "odin_path.txt");
+
+    static string LoadOdinPath()
+    {
+        try { return System.IO.File.Exists(OdinSettingsFile) ? System.IO.File.ReadAllText(OdinSettingsFile).Trim() : ""; }
+        catch { return ""; }
+    }
+
+    static void SaveOdinPath(string path)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(OdinSettingsFile)!);
+            System.IO.File.WriteAllText(OdinSettingsFile, path);
+        }
+        catch { }
+    }
+
+    /// جست‌وجوی پس‌زمینه برای یک کپی از Odin که از قبل خودِ کاربر دانلود کرده (ما Odin را همراه برنامه نمی‌گذاریم،
+    /// چون فایل بسته و متعلق به سامسونگ است و حق بازتوزیعش را نداریم؛ فقط اگر جایی پیدایش کنیم مسیرش را پر می‌کنیم).
+    async Task AutoDetectOdin()
+    {
+        if (OdinPathBox.Text.Trim().Length > 0 && File.Exists(OdinPathBox.Text.Trim())) return;
+        var found = await Task.Run(SearchForOdin);
+        if (found != null)
+        {
+            OdinPathBox.Text = found;
+            SaveOdinPath(found);
+        }
+    }
+
+    static string? SearchForOdin()
+    {
+        string[] roots =
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+        };
+        foreach (var root in roots.Distinct())
+        {
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
+            var hit = SearchDir(root, 0);
+            if (hit != null) return hit;
+        }
+        return null;
+    }
+
+    static string? SearchDir(string dir, int depth)
+    {
+        if (depth > 3) return null;
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(dir))
+            {
+                var n = Path.GetFileName(f);
+                if (n.StartsWith("odin", StringComparison.OrdinalIgnoreCase) && n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                    return f;
+            }
+            foreach (var d in Directory.EnumerateDirectories(dir))
+            {
+                var hit = SearchDir(d, depth + 1);
+                if (hit != null) return hit;
+            }
+        }
+        catch { /* بدون دسترسی یا پوشه‌ی غیرقابل‌خواندن؛ رد شو */ }
+        return null;
+    }
+
+    void OdinSource_Click(object sender, RoutedEventArgs e)
+    {
+        try { Process.Start(new ProcessStartInfo("https://www.bing.com/search?q=Odin+flash+tool+XDA+download") { UseShellExecute = true }); } catch { }
+    }
+
+    void OdinBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Odin.exe|*.exe", Title = T("grp_odin") };
+        if (dlg.ShowDialog(this) != true) return;
+        OdinPathBox.Text = dlg.FileName;
+        SaveOdinPath(dlg.FileName);
+    }
+
+    void OdinLaunch_Click(object sender, RoutedEventArgs e)
+    {
+        var path = OdinPathBox.Text.Trim();
+        if (path.Length == 0 || !System.IO.File.Exists(path)) { StatusText.Text = T("odin_not_set"); return; }
+        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, WorkingDirectory = System.IO.Path.GetDirectoryName(path) }); }
+        catch (Exception ex) { StatusText.Text = T("odin_launch_failed", ex.Message); }
     }
 
     void Firmware_Click(object sender, RoutedEventArgs e)
