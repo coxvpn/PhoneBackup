@@ -34,6 +34,7 @@
                     <ComboBoxItem Content="فارسی" />
                 </ComboBox>
                 <Button x:Name="UpdateBtn" Padding="10,4" Margin="4,0" Click="Update_Click" />
+                <Button x:Name="ManageAppsBtn" Padding="10,4" Margin="4,0" IsEnabled="False" Click="ManageApps_Click" />
                 <Button x:Name="InfoBtn" Padding="10,4" Margin="4,0" IsEnabled="False" Click="Info_Click" />
                 <Button x:Name="AboutBtn" Padding="10,4" Margin="4,0" Click="About_Click" />
             </StackPanel>

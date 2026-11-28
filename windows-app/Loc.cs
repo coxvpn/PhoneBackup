@@ -258,6 +258,8 @@ public static class Loc
 
         // ---- install from folder ----
         ["btn_install_folder"] = ("Install APKs from a PC folder", "نصب چند APK از فولدر کامپیوتر"),
+        ["btn_manage_apps"] = ("Manage apps", "مدیریت برنامه‌ها"),
+        ["manage_apps_header"] = ("Install or uninstall apps on: {0}", "نصب یا حذف برنامه روی: {0}"),
         ["install_folder_empty"] = ("No .apk / .apks files found in: {0}", "فایل APK/.apks در این پوشه پیدا نشد: {0}"),
         ["install_folder_pick_title"] = ("Apps found in: {0}", "برنامه‌های پیدا‌شده در: {0}"),
         ["install_folder_pick_title_bar"] = ("Choose apps to install", "انتخاب برنامه‌ها برای نصب"),

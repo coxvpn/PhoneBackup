@@ -90,6 +90,7 @@ public partial class MainWindow : Window
         Title = T("title") + " v" + Updater.Current.ToString(3);
         LangLabel.Text = T("language");
         UpdateBtn.Content = T("btn_update");
+        ManageAppsBtn.Content = T("btn_manage_apps");
         AboutBtn.Content = T("btn_about");
         InfoBtn.Content = T("btn_info");
         GrpSummary.Header = T("grp_phone_summary");
@@ -153,7 +154,8 @@ public partial class MainWindow : Window
 
     void SetButtons(bool enabled)
     {
-        BackupBtn.IsEnabled = RestoreBtn.IsEnabled = InfoBtn.IsEnabled = TransferBtn.IsEnabled = enabled;
+        BackupBtn.IsEnabled = RestoreBtn.IsEnabled = InfoBtn.IsEnabled = TransferBtn.IsEnabled =
+            ManageAppsBtn.IsEnabled = enabled;
     }
 
     void SetProgress(int value, int max, string text)
@@ -189,6 +191,12 @@ public partial class MainWindow : Window
     }
 
     void About_Click(object sender, RoutedEventArgs e) => new AboutWindow { Owner = this }.ShowDialog();
+
+    void ManageApps_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy || devState != 2) return;
+        new AppsManagerWindow(this, apps) { Owner = this }.ShowDialog();
+    }
 
     void Cancel_Click(object sender, RoutedEventArgs e)
     {
