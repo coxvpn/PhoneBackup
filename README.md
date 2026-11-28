@@ -8,7 +8,6 @@ Created by Mostafa Mandegari (مصطفی ماندگاری).
 2. Settings → Actions → General → Workflow permissions → **Read and write permissions** → Save.
 3. Every push builds automatically and publishes a new **Release** (right side of the repo page) containing `PhoneBackup.exe`.
    You can also run it manually from the Actions tab → Run workflow.
-<img width="1147" height="839" alt="image" src="https://github.com/user-attachments/assets/e8d66c63-3766-4327-960e-91a5fab8a4ca" />
 
 ## Versioning
 The file `VERSION` holds the major.minor number (e.g. `1.4`). Every build appends the Actions run number, so the Release is `v1.4.<run>` and the file is named `PhoneBackup_v1.4.<run>.exe`. Edit `VERSION` to start a new minor/major version.
@@ -23,9 +22,13 @@ The file `VERSION` holds the major.minor number (e.g. `1.4`). Every build append
 
 ## More features
 - Phone info window has a "Flash firmware (launch your own Odin)" box: it searches common folders (Desktop, Downloads, Documents, Program Files) in the background for an `Odin*.exe` you already have and fills the path automatically; otherwise browse to it once (remembered after that) and launch it with one click. A link opens a search for where to get a copy. Odin itself is closed-source and owned by Samsung, so this app never bundles or redistributes it, and never writes firmware itself - it only helps you reach Download mode and your own Odin faster.
-- Layout matches the two-column "What to include / Media folders" + single "Apps to back up" card design; only the app list, the media-folder list and the log scroll internally, so the Backup/Restore/Cancel/Open-folder buttons always stay visible.
-- Nothing is ticked on first run; pick what you want each time.
+- The main window now shows a compact phone-specs summary (model, Android version, chipset/RAM, storage, battery) plus a content breakdown (Photos/Videos, Music, Apps - sized with a single `du` call) where the old "What to include"/"Media folders" boxes used to sit; full details are still in "Phone info".
+- Clicking "Back Up Phone" opens a picker dialog: tick Apps to reveal the full app list (load/search/filter/uninstall/install-from-folder), tick Photos to reveal the checkable media-folder list, plus simple Contacts/SMS checkboxes - nothing is ticked by default.
+- "Transfer phone to phone": opens the same picker for the currently connected phone, reads the selected items into a temporary location, then asks you to disconnect that phone and connect a second one; once it is detected and authorized, everything is written straight onto it with no extra prompt and no files kept on the PC. If something fails partway, the collected data is kept in a temp folder and the log shows its path so you can restore it later with the normal Restore button.
+- The Restore picker now also has real Contacts/SMS checkboxes (instead of an informational note), so you can opt out of restoring them too.
 - The phone's own helper app can also take a backup by itself: "Back up contacts to file" and "Back up SMS to file" each write one JSON file (same format used by the PC app) wherever you choose on the phone, with no computer needed - handy as a quick manual backup or to move data between phones directly.
+- "Back up apps (select)" opens a checkable list of installed apps right on the phone; tick the ones you want, pick a destination folder, and it writes each as an installable `Name.apk` (or `Name.apks` for split apps) there - a full on-phone app backup with no PC step.
+- The phone app has its own "About" screen (version + "Developer: Mostafa Mandegari").
 - If automatic SMS/contacts restore via the PC fails (common on some Android 16 / One UI builds, where `cmd role add-role-holder` is accepted but the phone's own default-SMS-app record never updates), the backup JSON file is pushed to the phone at `/sdcard/Download/PhoneBackup_Restore/`. Open the helper app ("Phone Backup Helper") on the phone itself and use its **Restore contacts from file** / **Restore SMS from file** buttons (SMS needs you to tap "Set as default SMS app" there first) - this restores locally on the phone with no PC/ADB step needed.
 - First run starts with nothing ticked; the window auto-fits small screens on launch and the whole form scrolls if it is still taller than your screen.
 - *Install APKs from a PC folder* (next to "Load app list"): pick any folder on your computer and tick which .apk/.apks files to install on the phone.

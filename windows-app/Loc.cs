@@ -290,6 +290,30 @@ public static class Loc
         ["odin_launch_failed"] = ("Could not launch Odin: {0}", "اجرای Odin ناموفق بود: {0}"),
         ["odin_source_link"] = ("Don't have Odin? Search for a copy (opens your browser)", "Odin نداری؟ جست‌وجوی یک نسخه (مرورگرت باز می‌شود)"),
 
+        // ---- phone summary (normal state) / backup dialog ----
+        ["grp_phone_summary"] = ("Phone", "گوشی"),
+        ["summary_waiting"] = ("Connect a phone to see its specs here. Full details are in \"Phone info\".", "گوشی را وصل کن تا مشخصاتش اینجا دیده شود. جزئیات کامل در «مشخصات گوشی» است."),
+        ["summary_battery"] = ("Battery", "باتری"),
+        ["summary_media"] = ("Photos/Videos", "عکس و فیلم"),
+        ["summary_music"] = ("Music", "موزیک"),
+        ["summary_apps_size"] = ("Apps", "برنامه‌ها"),
+        ["backup_dlg_title"] = ("Choose what to back up", "انتخاب موارد بکاپ"),
+        ["backup_dlg_header"] = ("Back up from: {0}", "بکاپ از: {0}"),
+        ["btn_start_backup"] = ("Start backup", "شروع بکاپ"),
+
+        // ---- phone-to-phone transfer ----
+        ["btn_transfer"] = ("Transfer phone to phone", "انتقال گوشی به گوشی"),
+        ["transfer_dlg_title"] = ("Choose what to transfer", "انتخاب موارد انتقال"),
+        ["transfer_dlg_header"] = ("Transfer from: {0}\nIt will be written straight onto the second phone - no files are kept.", "انتقال از: {0}\nمستقیم روی گوشی دوم نوشته می‌شود؛ هیچ فایلی نگه داشته نمی‌شود."),
+        ["btn_start_transfer"] = ("Continue - connect the second phone next", "ادامه - بعدش گوشی دوم را وصل کن"),
+        ["transfer_backup_from"] = ("Reading the selected items from: {0}", "خواندن موارد انتخابی از: {0}"),
+        ["transfer_backup_done"] = ("Done reading from the first phone.", "خواندن از گوشی اول تمام شد."),
+        ["transfer_disconnect_first"] = ("Now disconnect this phone and connect the SECOND phone with the cable...", "حالا این گوشی را جدا کن و گوشی دوم را با کابل وصل کن..."),
+        ["transfer_second_unauth"] = ("A second phone is connected - confirm the \"Allow USB debugging\" prompt on it.", "گوشی دوم وصل شد؛ پیام «Allow USB debugging» را روی خودش تأیید کن."),
+        ["transfer_restoring_to"] = ("Second phone: {0}. Writing the data onto it now...", "گوشی دوم: {0}. در حال نوشتن اطلاعات روی آن..."),
+        ["transfer_done"] = ("✅ Transfer finished.", "✅ انتقال تمام شد."),
+        ["transfer_kept_backup"] = ("Something went wrong partway through. What was already collected is kept at: {0} - you can restore it to a phone later from the Restore button.", "در میانه‌ی کار مشکلی پیش آمد. آنچه تا الان جمع شده اینجا نگه داشته شد: {0} - بعداً می‌توانی از دکمه‌ی «بازیابی» روی یک گوشی برش گردانی."),
+
         // ---- about ----
         ["about_title"] = ("About", "درباره برنامه"),
         ["about_desc"] = ("Back up and restore APK files, contacts, SMS, photos, videos and music of an Android phone from Windows.", "پشتیبان‌گیری و بازیابی فایل نصبی برنامه‌ها، مخاطبین، پیامک‌ها، عکس، فیلم و موزیک گوشی اندروید از ویندوز."),

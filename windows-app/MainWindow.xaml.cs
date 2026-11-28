@@ -15,7 +15,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -41,9 +40,8 @@ public partial class MainWindow : Window
 
     readonly Adb adb = new();
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(3) };
-    readonly ObservableCollection<AppItem> apps = new();
-    readonly ObservableCollection<PickItem> folders = new();
-    ICollectionView? appsView;
+    internal readonly ObservableCollection<AppItem> apps = new();
+    internal readonly ObservableCollection<PickItem> folders = new();
     CancellationTokenSource? cts;
     CancellationToken ct;
     string? serial;
@@ -55,26 +53,16 @@ public partial class MainWindow : Window
     bool busy;
     bool ready;
 
+    /// وقتی پنجره‌ی انتخاب برنامه‌های بکاپ باز است، این را برای به‌روز نگه‌داشتن شمارنده‌اش ست می‌کند.
+    internal Action? OnAppsChanged;
+    internal string? DeviceDesc => deviceDesc;
+
     static string T(string key, params object[] a) => Loc.T(key, a);
 
     public MainWindow()
     {
         InitializeComponent();
         Loc.Load();
-
-        AppList.ItemsSource = apps;
-        FolderList.ItemsSource = folders;
-        appsView = CollectionViewSource.GetDefaultView(apps);
-        appsView.Filter = o =>
-        {
-            var a = (AppItem)o;
-            bool isSystem = a.Kind == 1;
-            if (isSystem ? ShowSystemChk.IsChecked != true : ShowUserChk.IsChecked != true) return false;
-            var t = SearchBox.Text.Trim();
-            if (t.Length == 0) return true;
-            return a.Name.Contains(t, StringComparison.OrdinalIgnoreCase) ||
-                   a.Package.Contains(t, StringComparison.OrdinalIgnoreCase);
-        };
 
         FolderBox.Text = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         LangBox.SelectedIndex = Loc.Persian ? 1 : 0;
@@ -84,7 +72,6 @@ public partial class MainWindow : Window
         try { adb.Extract(); }
         catch (Exception ex) { Log(T("adb_prep_error", ex.Message)); }
 
-        SizeChanged += (_, _) => { };
         Loaded += (_, _) => FitToScreen();
         timer.Tick += async (_, _) => await RefreshDevice();
         Loaded += async (_, _) =>
@@ -105,37 +92,15 @@ public partial class MainWindow : Window
         UpdateBtn.Content = T("btn_update");
         AboutBtn.Content = T("btn_about");
         InfoBtn.Content = T("btn_info");
-        GrpWhat.Header = T("grp_what");
-        ChkApps.Content = T("chk_apps");
-        ChkMedia.Content = T("chk_media");
-        ChkContacts.Content = T("chk_contacts");
-        ChkSms.Content = T("chk_sms");
-        GrpMedia.Header = T("grp_media");
-        RefreshFoldersBtn.Content = T("btn_refresh_folders");
-        GrpApps.Header = T("grp_apps");
-        LoadAppsBtn.Content = T("btn_load_apps");
-        InstallFolderBtn.Content = T("btn_install_folder");
-        SelAllBtn.Content = T("btn_sel_all");
-        SelNoneBtn.Content = T("btn_sel_none");
-        SearchLabel.Text = T("search");
-        ShowUserChk.Content = T("show_user");
-        ShowSystemChk.Content = T("show_system");
-        UninstallBtn.Content = T("btn_uninstall");
-        OpenFolderBtn.Content = T("btn_open_folder");
-        if (AppList.View is GridView gv && gv.Columns.Count >= 5)
-        {
-            gv.Columns[1].Header = T("col_name");
-            gv.Columns[2].Header = T("col_pkg");
-            gv.Columns[3].Header = T("col_type");
-            gv.Columns[4].Header = T("col_size");
-        }
-        appsView?.Refresh();
+        GrpSummary.Header = T("grp_phone_summary");
         FolderLabel.Text = T("folder");
         BrowseBtn.Content = T("browse");
         BackupBtn.Content = T("btn_backup");
         RestoreBtn.Content = T("btn_restore");
         CancelBtn.Content = T("btn_cancel");
-        UpdateAppCount();
+        OpenFolderBtn.Content = T("btn_open_folder");
+        TransferBtn.Content = T("btn_transfer");
+        RenderSummary();
         RenderDevice();
     }
 
@@ -147,7 +112,7 @@ public partial class MainWindow : Window
         ApplyLanguage();
     }
 
-    void Log(string s)
+    internal void Log(string s)
     {
         if (!Dispatcher.CheckAccess())
         {
@@ -188,8 +153,7 @@ public partial class MainWindow : Window
 
     void SetButtons(bool enabled)
     {
-        BackupBtn.IsEnabled = RestoreBtn.IsEnabled = LoadAppsBtn.IsEnabled =
-            RefreshFoldersBtn.IsEnabled = UninstallBtn.IsEnabled = InfoBtn.IsEnabled = InstallFolderBtn.IsEnabled = enabled;
+        BackupBtn.IsEnabled = RestoreBtn.IsEnabled = InfoBtn.IsEnabled = TransferBtn.IsEnabled = enabled;
     }
 
     void SetProgress(int value, int max, string text)
@@ -200,8 +164,7 @@ public partial class MainWindow : Window
         StatusText.Text = text;
     }
 
-    /// اگر صفحه‌نمایش کوچک‌تر از اندازه‌ی پیش‌فرض پنجره باشد، خودکار کوچک و وسط صفحه می‌شود؛
-    /// محتوای باقی‌مانده هم با اسکرول قابل دیدن است (نیازی به کشیدن گوشه نیست).
+    /// اگر صفحه‌نمایش کوچک‌تر از اندازه‌ی پیش‌فرض پنجره باشد، خودکار کوچک و وسط صفحه می‌شود.
     void FitToScreen()
     {
         var wa = SystemParameters.WorkArea;
@@ -235,28 +198,79 @@ public partial class MainWindow : Window
         cts.Cancel();
     }
 
-    // ---------------- app list ----------------
+    // ---------------- phone summary (normal state) ----------------
 
-    void UpdateAppCount()
+    void RenderSummary()
     {
-        AppCountText.Text = T("apps_selected", apps.Count(a => a.IsSelected), apps.Count);
+        SummaryText.Text = devState == 2 && !string.IsNullOrEmpty(summaryLine)
+            ? summaryLine
+            : T("summary_waiting");
     }
 
-    void Search_Changed(object sender, TextChangedEventArgs e) => appsView?.Refresh();
+    string? summaryLine;
 
-    void SetVisibleSelection(bool value)
+    static string SizeGb(double bytes)
     {
-        if (appsView == null) return;
-        foreach (var a in appsView.Cast<AppItem>().ToList()) a.IsSelected = value;
-        UpdateAppCount();
+        double gb = bytes / 1024.0 / 1024.0 / 1024.0;
+        if (gb >= 1) return gb.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " GB";
+        double mb = bytes / 1024.0 / 1024.0;
+        return mb.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " MB";
     }
 
-    void SelAll_Click(object sender, RoutedEventArgs e) => SetVisibleSelection(true);
-    void SelNone_Click(object sender, RoutedEventArgs e) => SetVisibleSelection(false);
+    async Task RefreshSummary(string dev)
+    {
+        try
+        {
+            var infoTask = DeviceInfo.CollectAsync(adb, dev);
+            var duTask = adb.RunOn(dev, "shell", "du", "-sh",
+                "/sdcard/DCIM", "/sdcard/Pictures", "/sdcard/Movies", "/sdcard/Music", "/data/app");
+            await Task.WhenAll(infoTask, duTask);
 
-    async void LoadApps_Click(object sender, RoutedEventArgs e) => await RunSafe(LoadApps);
+            var info = infoTask.Result;
+            string Val(string key) => info.Rows.FirstOrDefault(r => r.Key == key)?.Value ?? "";
+            var parts = new List<string>();
+            var model = Val("model"); if (model.Length > 0) parts.Add(model);
+            var android = Val("android"); if (android.Length > 0) parts.Add("Android " + android);
+            var chipset = Val("chipset"); if (chipset.Length > 0) parts.Add(chipset);
+            var ram = Val("ram"); if (ram.Length > 0) parts.Add("RAM " + ram);
+            var storage = Val("storage"); if (storage.Length > 0) parts.Add(storage);
+            var battery = Val("battery"); if (battery.Length > 0) parts.Add(T("summary_battery") + " " + battery);
+            var line1 = string.Join("   •   ", parts);
 
-    async Task LoadApps()
+            double media = 0, music = 0, appsSize = 0;
+            foreach (var raw in duTask.Result.Output.Split('\n'))
+            {
+                var m = Regex.Match(raw.Trim(), @"^(\d+(?:\.\d+)?)([KMGT]?)\s+(.+)$", RegexOptions.IgnoreCase);
+                if (!m.Success) continue;
+                double val = double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+                double bytes = m.Groups[2].Value.ToUpperInvariant() switch
+                {
+                    "K" => val * 1024,
+                    "M" => val * 1024 * 1024,
+                    "G" => val * 1024 * 1024 * 1024,
+                    "T" => val * 1024d * 1024 * 1024 * 1024,
+                    _ => val
+                };
+                var path = m.Groups[3].Value.Trim();
+                if (path.EndsWith("/data/app")) appsSize += bytes;
+                else if (path.EndsWith("/Music")) music += bytes;
+                else media += bytes; // DCIM, Pictures, Movies
+            }
+            var line2parts = new List<string>();
+            if (media > 0) line2parts.Add(T("summary_media") + ": " + SizeGb(media));
+            if (music > 0) line2parts.Add(T("summary_music") + ": " + SizeGb(music));
+            if (appsSize > 0) line2parts.Add(T("summary_apps_size") + ": " + SizeGb(appsSize));
+            var line2 = string.Join("   •   ", line2parts);
+
+            summaryLine = line2.Length > 0 ? line1 + "\n" + line2 : line1;
+        }
+        catch { summaryLine = null; }
+        RenderSummary();
+    }
+
+    // ---------------- app list (loading from phone; UI lives in BackupWindow) ----------------
+
+    internal async Task LoadApps()
     {
         using var h = await ConnectHelper(false);
         if (h == null) { Log(T("apps_load_failed")); return; }
@@ -276,18 +290,16 @@ public partial class MainWindow : Window
                     Kind = n["k"]?.GetValue<int>() ?? 0,
                     Paths = n["f"]!.AsArray().Select(x => x!.GetValue<string>()).ToList()
                 };
-                item.PropertyChanged += (_, _) => UpdateAppCount();
+                item.PropertyChanged += (_, _) => OnAppsChanged?.Invoke();
                 apps.Add(item);
             }
-            UpdateAppCount();
+            OnAppsChanged?.Invoke();
             Log(T("apps_loaded", apps.Count));
         }
         finally { await h.StopAsync(); }
     }
 
-    // ---------------- media folders (read from phone) ----------------
-
-    async void RefreshFolders_Click(object sender, RoutedEventArgs e) => await RunSafe(LoadMediaFolders);
+    // ---------------- media folders (read from phone; UI lives in BackupWindow) ----------------
 
     static IEnumerable<string> ParseDirs(string output)
     {
@@ -301,7 +313,7 @@ public partial class MainWindow : Window
         }
     }
 
-    async Task LoadMediaFolders()
+    internal async Task LoadMediaFolders()
     {
         var found = new List<string>();
         var r = await adb.RunOn(serial!, "shell", "ls", "-p", "/sdcard/");
@@ -363,13 +375,15 @@ public partial class MainWindow : Window
                 deviceDesc = $"{model} (Android {ver})";
                 Log(T("device_found", deviceDesc));
                 apps.Clear();
-                UpdateAppCount();
+                OnAppsChanged?.Invoke();
+                summaryLine = null;
             }
             devState = 2;
             RenderDevice();
             if (isNew)
             {
                 try { await LoadMediaFolders(); } catch { }
+                await RefreshSummary(ok);
             }
         }
         else if (unauth != null) { serial = null; devState = 1; RenderDevice(); }
@@ -416,8 +430,171 @@ public partial class MainWindow : Window
         await RefreshDevice();
     }
 
-    async void Backup_Click(object sender, RoutedEventArgs e) => await RunSafe(DoBackup);
+    async void Backup_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy) return;
+        var dlg = new BackupWindow(this, apps, folders) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+        await RunSafe(() => DoBackup(dlg.DoApps, dlg.DoMedia, dlg.DoContacts, dlg.DoSms));
+    }
+
     async void Restore_Click(object sender, RoutedEventArgs e) => await RunSafe(DoRestore);
+
+    async void Transfer_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy || devState != 2) return;
+        var dlg = new BackupWindow(this, apps, folders, forTransfer: true) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+        await RunSafe(() => DoTransfer(dlg.DoApps, dlg.DoMedia, dlg.DoContacts, dlg.DoSms));
+    }
+
+    /// بکاپ از گوشی فعلی را در یک پوشه‌ی موقت می‌گیرد، منتظر وصل‌شدن گوشی دوم می‌ماند،
+    /// و همان را مستقیم (بدون پرسیدن دوباره) روی گوشی دوم بازیابی می‌کند.
+    async Task DoTransfer(bool doApps, bool media, bool contacts, bool sms)
+    {
+        if (!(doApps || media || contacts || sms)) { Log(T("select_one")); return; }
+
+        var sourceSerial = serial!;
+        var sourceDesc = deviceDesc ?? "";
+        var tempRoot = Path.Combine(Path.GetTempPath(), "PhoneBackup_Transfer_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        bool cleanTemp = true;
+        try
+        {
+            Log(T("transfer_backup_from", sourceDesc));
+
+            if (contacts || sms)
+            {
+                using var h = await ConnectHelper(false);
+                if (h == null) Log(T("skip_contacts_sms"));
+                else
+                {
+                    try
+                    {
+                        if (contacts)
+                        {
+                            Log(T("backing_contacts"));
+                            var list = await h.Stream("get_contacts", (i, n) => SetProgress(i, n, T("list_progress", T("contacts"), i, n)));
+                            SaveList(Path.Combine(tempRoot, "contacts.json"), list);
+                            Log(T("contacts_saved", list.Count));
+                        }
+                        if (sms)
+                        {
+                            Log(T("backing_sms"));
+                            var list = await h.Stream("get_sms", (i, n) => SetProgress(i, n, T("list_progress", T("sms"), i, n)));
+                            SaveList(Path.Combine(tempRoot, "sms.json"), list);
+                            Log(T("sms_saved", list.Count));
+                        }
+                    }
+                    finally { await h.StopAsync(); }
+                }
+            }
+            if (doApps)
+            {
+                var selected = apps.Where(a => a.IsSelected).ToList();
+                if (selected.Count == 0) Log(T("apps_none_selected"));
+                else await BackupApps(tempRoot, selected);
+            }
+            if (media) await BackupMedia(tempRoot);
+            Log(T("transfer_backup_done"));
+
+            var targetSerial = await WaitForSecondPhone(sourceSerial);
+
+            serial = targetSerial;
+            apps.Clear();
+            OnAppsChanged?.Invoke();
+            var model = (await adb.RunOn(targetSerial, "shell", "getprop", "ro.product.model")).Output.Trim();
+            var ver = (await adb.RunOn(targetSerial, "shell", "getprop", "ro.build.version.release")).Output.Trim();
+            deviceModel = model;
+            deviceDesc = $"{model} (Android {ver})";
+            devState = 2;
+            RenderDevice();
+            Log(T("transfer_restoring_to", deviceDesc));
+            try { await LoadMediaFolders(); } catch { }
+            await RefreshSummary(targetSerial);
+
+            await RestoreAllFromFolder(tempRoot);
+            Log(T("transfer_done"));
+        }
+        catch
+        {
+            cleanTemp = false;
+            Log(T("transfer_kept_backup", tempRoot));
+            throw;
+        }
+        finally
+        {
+            if (cleanTemp) { try { Directory.Delete(tempRoot, true); } catch { } }
+        }
+    }
+
+    /// منتظر می‌ماند تا گوشیِ دیگری (با سریال متفاوت از گوشی اول) وصل و تأیید شود.
+    async Task<string> WaitForSecondPhone(string excludeSerial)
+    {
+        Log(T("transfer_disconnect_first"));
+        bool warnedUnauth = false;
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            await Task.Delay(1500, ct);
+            string output;
+            try { output = (await adb.Run("devices")).Output; } catch { continue; }
+
+            string? found = null, unauth = null;
+            foreach (var raw in output.Split('\n'))
+            {
+                var line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith("*") || line.StartsWith("List of")) continue;
+                var parts = line.Split(new[] { '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2 || parts[0] == excludeSerial) continue;
+                if (parts[1] == "device") found ??= parts[0];
+                else if (parts[1] == "unauthorized") unauth ??= parts[0];
+            }
+            if (found != null) return found;
+            if (unauth != null && !warnedUnauth)
+            {
+                warnedUnauth = true;
+                Log(T("transfer_second_unauth"));
+            }
+        }
+    }
+
+    /// همان‌چیزهایی که در پوشه‌ی بکاپ هست را، بدون باز کردن پنجره‌ی انتخاب، مستقیم بازیابی می‌کند.
+    async Task RestoreAllFromFolder(string root)
+    {
+        var appsDir = Path.Combine(root, "apps");
+        var mediaDir = Path.Combine(root, "media");
+        bool hasC = File.Exists(Path.Combine(root, "contacts.json"));
+        bool hasS = File.Exists(Path.Combine(root, "sms.json"));
+
+        var appFiles = Directory.Exists(appsDir)
+            ? Directory.GetFiles(appsDir)
+                .Where(x => x.EndsWith(".apk", StringComparison.OrdinalIgnoreCase) || x.EndsWith(".apks", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase).ToList()
+            : new List<string>();
+        var mediaFolders = BackupMediaFolders(mediaDir);
+
+        if (hasC || hasS)
+        {
+            using var h = await ConnectHelper(false);
+            if (h == null)
+            {
+                Log(T("skip_contacts_sms"));
+                await PushForManualRestore(hasC ? Path.Combine(root, "contacts.json") : null, hasS ? Path.Combine(root, "sms.json") : null);
+            }
+            else
+            {
+                try
+                {
+                    if (hasC) await RestoreList(h, Path.Combine(root, "contacts.json"), "put_contacts", 200, T("contacts"));
+                    if (hasS) await RestoreSms(h, Path.Combine(root, "sms.json"));
+                }
+                finally { await h.StopAsync(); }
+            }
+        }
+        if (appFiles.Count > 0) await RestoreApps(appFiles);
+        if (mediaFolders.Count > 0) await RestoreMedia(mediaDir, mediaFolders);
+    }
 
     static void PullLine(Action<string> log, string l)
     {
@@ -510,10 +687,8 @@ public partial class MainWindow : Window
 
     // ---------------- backup ----------------
 
-    async Task DoBackup()
+    async Task DoBackup(bool doApps, bool media, bool contacts, bool sms)
     {
-        bool doApps = ChkApps.IsChecked == true, media = ChkMedia.IsChecked == true;
-        bool contacts = ChkContacts.IsChecked == true, sms = ChkSms.IsChecked == true;
         if (!(doApps || media || contacts || sms)) { Log(T("select_one")); return; }
 
         var baseDir = FolderBox.Text.Trim();
@@ -708,19 +883,16 @@ public partial class MainWindow : Window
 
     async Task DoRestore()
     {
-        bool doApps = ChkApps.IsChecked == true, media = ChkMedia.IsChecked == true;
-        bool contacts = ChkContacts.IsChecked == true, sms = ChkSms.IsChecked == true;
-
         var root = ResolveBackupRoot(FolderBox.Text.Trim());
         if (root == null) { Log(T("no_backup_found")); return; }
 
         var appsDir = Path.Combine(root, "apps");
         var mediaDir = Path.Combine(root, "media");
-        bool hasC = contacts && File.Exists(Path.Combine(root, "contacts.json"));
-        bool hasS = sms && File.Exists(Path.Combine(root, "sms.json"));
+        bool hasC = File.Exists(Path.Combine(root, "contacts.json"));
+        bool hasS = File.Exists(Path.Combine(root, "sms.json"));
 
         var appItems = new List<PickItem>();
-        if (doApps && Directory.Exists(appsDir))
+        if (Directory.Exists(appsDir))
         {
             foreach (var f in Directory.GetFiles(appsDir)
                          .Where(x => x.EndsWith(".apk", StringComparison.OrdinalIgnoreCase) ||
@@ -736,40 +908,37 @@ public partial class MainWindow : Window
             }
         }
         var mediaItems = new List<PickItem>();
-        if (media)
-            foreach (var rel in BackupMediaFolders(mediaDir))
-                mediaItems.Add(new PickItem { Key = rel, Display = rel, IsSelected = true });
+        foreach (var rel in BackupMediaFolders(mediaDir))
+            mediaItems.Add(new PickItem { Key = rel, Display = rel, IsSelected = true });
 
         if (!(appItems.Count > 0 || mediaItems.Count > 0 || hasC || hasS)) { Log(T("nothing_to_restore")); return; }
 
-        var also = new List<string>();
-        if (hasC) also.Add(T("contacts"));
-        if (hasS) also.Add(T("sms"));
-        var dlg = new RestoreWindow(root, deviceDesc ?? "", appItems, mediaItems,
-            also.Count > 0 ? T("restore_also", string.Join(", ", also)) : "") { Owner = this };
+        var dlg = new RestoreWindow(root, deviceDesc ?? "", appItems, mediaItems, hasC, hasS) { Owner = this };
         if (dlg.ShowDialog() != true) return;
 
         var chosenApps = appItems.Where(it => it.IsSelected).Select(it => it.Key).ToList();
         var chosenMedia = mediaItems.Where(it => it.IsSelected).Select(it => it.Key).ToList();
-        if (chosenApps.Count == 0 && chosenMedia.Count == 0 && !hasC && !hasS) { Log(T("nothing_to_restore")); return; }
+        bool doContacts = hasC && dlg.DoContacts;
+        bool doSms = hasS && dlg.DoSms;
+        if (chosenApps.Count == 0 && chosenMedia.Count == 0 && !doContacts && !doSms) { Log(T("nothing_to_restore")); return; }
         Log(T("restoring_from", root));
 
-        if (hasC || hasS)
+        if (doContacts || doSms)
         {
             using var h = await ConnectHelper(false);
             if (h == null)
             {
                 Log(T("skip_contacts_sms"));
                 await PushForManualRestore(
-                    hasC ? Path.Combine(root, "contacts.json") : null,
-                    hasS ? Path.Combine(root, "sms.json") : null);
+                    doContacts ? Path.Combine(root, "contacts.json") : null,
+                    doSms ? Path.Combine(root, "sms.json") : null);
             }
             else
             {
                 try
                 {
-                    if (hasC) await RestoreList(h, Path.Combine(root, "contacts.json"), "put_contacts", 200, T("contacts"));
-                    if (hasS) await RestoreSms(h, Path.Combine(root, "sms.json"));
+                    if (doContacts) await RestoreList(h, Path.Combine(root, "contacts.json"), "put_contacts", 200, T("contacts"));
+                    if (doSms) await RestoreSms(h, Path.Combine(root, "sms.json"));
                 }
                 finally { await h.StopAsync(); }
             }
@@ -811,7 +980,7 @@ public partial class MainWindow : Window
     }
 
     /// فایل‌های انتخاب‌شده‌ی .apk و .apks را نصب می‌کند.
-    async Task RestoreApps(List<string> files)
+    internal async Task RestoreApps(List<string> files)
     {
         Log(T("installing_apps", files.Count));
         var tmpRoot = Path.Combine(Path.GetTempPath(), "PhoneBackup_" + Guid.NewGuid().ToString("N"));
@@ -971,13 +1140,9 @@ public partial class MainWindow : Window
         await adb.RunOn(serial!, "shell", "am", "start", "-a", "android.settings.MANAGE_DEFAULT_APPS_SETTINGS");
     }
 
-    // ---------------- uninstall / filter / open folder ----------------
+    // ---------------- uninstall / install-from-folder / open folder (invoked from BackupWindow) ----------------
 
-    void Filter_Changed(object sender, RoutedEventArgs e) => appsView?.Refresh();
-
-    async void Uninstall_Click(object sender, RoutedEventArgs e) => await RunSafe(UninstallSelected);
-
-    async Task UninstallSelected()
+    internal async Task UninstallSelectedApps()
     {
         var sel = apps.Where(a => a.IsSelected).ToList();
         if (sel.Count == 0) { Log(T("uninstall_none")); return; }
@@ -997,7 +1162,6 @@ public partial class MainWindow : Window
         int done = 0, bad = 0, i = 0;
         foreach (var app in sel)
         {
-            ct.ThrowIfCancellationRequested();
             i++;
             SetProgress(i, sel.Count, T("apps_progress", i, sel.Count, app.Name));
             if (Protected.Contains(app.Package)) { bad++; Log(T("uninstall_protected", app.Package)); continue; }
@@ -1014,13 +1178,11 @@ public partial class MainWindow : Window
                 Log(T("uninstall_fail", app.Name, r.Output.Trim().Replace("\r", "").Replace("\n", " ")));
             }
         }
-        UpdateAppCount();
+        OnAppsChanged?.Invoke();
         Log(T("uninstall_done", done, bad));
     }
 
-    async void InstallFolder_Click(object sender, RoutedEventArgs e) => await RunSafe(InstallFromFolder);
-
-    async Task InstallFromFolder()
+    internal async Task InstallFromFolder()
     {
         var dlg = new Microsoft.Win32.OpenFolderDialog { Title = T("btn_install_folder") };
         if (dlg.ShowDialog(this) != true) return;

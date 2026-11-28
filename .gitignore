@@ -1,0 +1,7 @@
+bin/
+obj/
+build/
+.gradle/
+local.properties
+windows-app/Resources/helper.apk
+windows-app/Resources/adb/
