@@ -2,99 +2,96 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Icon="Resources/app.ico"
-        Width="920" Height="720" MinWidth="700" MinHeight="520"
+        Width="920" Height="720" MinWidth="700" MinHeight="420"
         WindowStartupLocation="CenterOwner" FontFamily="Segoe UI, Tahoma" FontSize="14">
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock x:Name="HeaderText" Grid.Row="0" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,12" />
 
-        <CheckBox x:Name="AppsChk" Grid.Row="1" Margin="0,0,0,6" FontWeight="SemiBold"
-                  Checked="AppsChk_Changed" Unchecked="AppsChk_Changed" />
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <CheckBox x:Name="AppsChk" Margin="0,0,0,6" FontWeight="SemiBold"
+                          Checked="AppsChk_Changed" Unchecked="AppsChk_Changed" />
 
-        <Border x:Name="AppsPanel" Grid.Row="2" BorderBrush="#DDD" BorderThickness="1" Padding="8"
-                Margin="18,0,0,12" Visibility="Collapsed">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <WrapPanel Grid.Row="0" Margin="0,0,0,8">
-                    <Button x:Name="LoadAppsBtn" Padding="12,4" Margin="0,0,8,4" Click="LoadApps_Click" />
-                    <Button x:Name="InstallFolderBtn" Padding="12,4" Margin="0,0,8,4" Click="InstallFolder_Click" />
-                    <Button x:Name="UninstallBtn" Padding="12,4" Margin="0,0,8,4" Foreground="#B00020" Click="Uninstall_Click" />
-                    <Button x:Name="SelAllBtn" Padding="12,4" Margin="0,0,8,4" Click="SelAll_Click" />
-                    <Button x:Name="SelNoneBtn" Padding="12,4" Margin="0,0,8,4" Click="SelNone_Click" />
-                    <CheckBox x:Name="ShowUserChk" IsChecked="True" VerticalAlignment="Center" Margin="8,0,8,4"
-                              Checked="Filter_Changed" Unchecked="Filter_Changed" />
-                    <CheckBox x:Name="ShowSystemChk" IsChecked="False" VerticalAlignment="Center" Margin="0,0,8,4"
-                              Checked="Filter_Changed" Unchecked="Filter_Changed" />
-                    <TextBlock x:Name="SearchLabel" VerticalAlignment="Center" Margin="8,0,6,4" />
-                    <TextBox x:Name="SearchBox" Width="170" Padding="3" Margin="0,0,8,4" TextChanged="Search_Changed" />
-                    <TextBlock x:Name="AppCountText" VerticalAlignment="Center" Margin="8,0,0,4" Foreground="#555" />
-                </WrapPanel>
-                <ListView x:Name="AppList" Grid.Row="1" Height="260">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Width="40">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" />
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                            <GridViewColumn Width="230" DisplayMemberBinding="{Binding Name}" />
-                            <GridViewColumn Width="220" DisplayMemberBinding="{Binding Package}" />
-                            <GridViewColumn Width="120" DisplayMemberBinding="{Binding TypeText}" />
-                            <GridViewColumn Width="80" DisplayMemberBinding="{Binding SizeText}" />
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-            </Grid>
-        </Border>
+                <Border x:Name="AppsPanel" BorderBrush="#DDD" BorderThickness="1" Padding="8"
+                        Margin="18,0,0,12" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <WrapPanel Grid.Row="0" Margin="0,0,0,8">
+                            <Button x:Name="LoadAppsBtn" Padding="12,4" Margin="0,0,8,4" Click="LoadApps_Click" />
+                            <Button x:Name="InstallFolderBtn" Padding="12,4" Margin="0,0,8,4" Click="InstallFolder_Click" />
+                            <Button x:Name="UninstallBtn" Padding="12,4" Margin="0,0,8,4" Foreground="#B00020" Click="Uninstall_Click" />
+                            <Button x:Name="SelAllBtn" Padding="12,4" Margin="0,0,8,4" Click="SelAll_Click" />
+                            <Button x:Name="SelNoneBtn" Padding="12,4" Margin="0,0,8,4" Click="SelNone_Click" />
+                            <CheckBox x:Name="ShowUserChk" IsChecked="True" VerticalAlignment="Center" Margin="8,0,8,4"
+                                      Checked="Filter_Changed" Unchecked="Filter_Changed" />
+                            <CheckBox x:Name="ShowSystemChk" IsChecked="False" VerticalAlignment="Center" Margin="0,0,8,4"
+                                      Checked="Filter_Changed" Unchecked="Filter_Changed" />
+                            <TextBlock x:Name="SearchLabel" VerticalAlignment="Center" Margin="8,0,6,4" />
+                            <TextBox x:Name="SearchBox" Width="170" Padding="3" Margin="0,0,8,4" TextChanged="Search_Changed" />
+                            <TextBlock x:Name="AppCountText" VerticalAlignment="Center" Margin="8,0,0,4" Foreground="#555" />
+                        </WrapPanel>
+                        <ListView x:Name="AppList" Grid.Row="1" Height="260">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Width="40">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Width="230" DisplayMemberBinding="{Binding Name}" />
+                                    <GridViewColumn Width="220" DisplayMemberBinding="{Binding Package}" />
+                                    <GridViewColumn Width="120" DisplayMemberBinding="{Binding TypeText}" />
+                                    <GridViewColumn Width="80" DisplayMemberBinding="{Binding SizeText}" />
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </Grid>
+                </Border>
 
-        <CheckBox x:Name="MediaChk" Grid.Row="3" Margin="0,0,0,6" FontWeight="SemiBold"
-                  Checked="MediaChk_Changed" Unchecked="MediaChk_Changed" />
+                <CheckBox x:Name="MediaChk" Margin="0,0,0,6" FontWeight="SemiBold"
+                          Checked="MediaChk_Changed" Unchecked="MediaChk_Changed" />
 
-        <Border x:Name="MediaPanel" Grid.Row="4" BorderBrush="#DDD" BorderThickness="1" Padding="8"
-                Margin="18,0,0,12" Visibility="Collapsed">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="150">
-                    <ItemsControl x:Name="FolderList">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" Content="{Binding Display}" Margin="0,0,18,4" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-                <Button x:Name="RefreshFoldersBtn" Grid.Column="1" Padding="10,4" Margin="10,0,0,0"
-                        VerticalAlignment="Top" Click="RefreshFolders_Click" />
-            </Grid>
-        </Border>
+                <Border x:Name="MediaPanel" BorderBrush="#DDD" BorderThickness="1" Padding="8"
+                        Margin="18,0,0,12" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ItemsControl x:Name="FolderList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" Content="{Binding Display}" Margin="0,0,18,4" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button x:Name="RefreshFoldersBtn" Grid.Column="1" Padding="10,4" Margin="10,0,0,0"
+                                VerticalAlignment="Top" Click="RefreshFolders_Click" />
+                    </Grid>
+                </Border>
 
-        <CheckBox x:Name="ContactsChk" Grid.Row="5" Margin="0,0,0,6" FontWeight="SemiBold" />
-        <CheckBox x:Name="SmsChk" Grid.Row="6" Margin="0,0,0,16" FontWeight="SemiBold" />
+                <CheckBox x:Name="ContactsChk" Margin="0,0,0,6" FontWeight="SemiBold" />
+                <CheckBox x:Name="SmsChk" Margin="0,0,0,6" FontWeight="SemiBold" />
+            </StackPanel>
+        </ScrollViewer>
 
-        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button x:Name="StartBtn" IsDefault="True" Padding="24,6" Click="Start_Click" />
             <Button x:Name="CancelBtn" IsCancel="True" Padding="24,6" Margin="8,0,0,0" />
         </StackPanel>
